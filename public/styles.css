@@ -1,0 +1,181 @@
+/* public/styles.css */
+:root {
+    --primary-color: #4a90e2;
+    --secondary-color: #f5f5f5;
+    --success-color: #28a745;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --info-color: #17a2b8;
+    --dark-color: #343a40;
+    --light-color: #f8f9fa;
+}
+
+/* General Styles */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    background-color: #f4f6f9;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
+/* Card Styles */
+.card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    transition: transform 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid #eee;
+    padding: 15px 20px;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+/* Form Styles */
+.form-control {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 8px 12px;
+    transition: border-color 0.2s ease;
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(74, 144, 226, 0.25);
+}
+
+.form-label {
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+/* Button Styles */
+.btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    border: none;
+}
+
+.btn-primary:hover {
+    background-color: #357abd;
+    transform: translateY(-1px);
+}
+
+/* Table Styles */
+.table {
+    width: 100%;
+    margin-bottom: 1rem;
+    background-color: transparent;
+}
+
+.table th {
+    padding: 12px;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+}
+
+.table td {
+    padding: 12px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0,0,0,.075);
+}
+
+/* Alert Styles */
+.alert {
+    padding: 12px 20px;
+    margin-bottom: 1rem;
+    border: 1px solid transparent;
+    border-radius: 4px;
+}
+
+.alert-success {
+    color: #155724;
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}
+
+.alert-danger {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+}
+
+/* Navigation Styles */
+.navbar {
+    background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 1rem 0;
+}
+
+.navbar-brand {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+/* Dashboard Stats */
+.stats-card {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #357abd 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.stats-card h3 {
+    font-size: 2rem;
+    margin: 0;
+}
+
+.stats-card p {
+    margin: 5px 0 0;
+    opacity: 0.8;
+}
+
+/* QR Code Styles */
+.qr-code-container {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    display: inline-block;
+}
+
+/* Print Styles */
+@media print {
+    .no-print {
+        display: none;
+    }
+    
+    body {
+        padding: 20px;
+    }
+    
+    .container {
+        width: 100%;
+        max-width: none;
+    }
+}

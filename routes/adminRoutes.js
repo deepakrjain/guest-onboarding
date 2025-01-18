@@ -1,45 +1,33 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
-const { verifyToken, isMainAdmin } = require('../middleware/authMiddleware');
-const { login, logout } = require('../controllers/adminController');
-const { body, validationResult } = require('express-validator');
-const multer = require('multer');
-const upload = multer({ dest: 'public/uploads/' });
+const authController = require('../controllers/authController');
+const { verifyToken, isMainAdmin, isGuestAdmin } = require('../middleware/authMiddleware');
+const { upload } = require('../middleware/uploadMiddleware');
+const { hotelValidationRules, validate } = require('../middleware/validationMiddleware');
 
-router.post(
-    '/add-hotel',
-    [
-        body('name').notEmpty().withMessage('Hotel name is required'),
-        body('address').notEmpty().withMessage('Address is required'),
-    ],
-    (req, res, next) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
-        }
-        next();
-    },
-    adminController.addHotel
-);
+// Auth routes
+router.get('/login', (req, res) => res.render('admin/login'));
+router.post('/login', authController.login);
+router.get('/logout', authController.logout);
 
-// Login route
-router.get('/login', (req, res) => {
-    res.render('admin/login');
-});
+// Protected routes
+router.use(verifyToken);
 
-router.post('/add-hotel', upload.single('logo'), adminController.addHotel);
+// Main admin routes
+router.use('/hotels', isMainAdmin);
 router.get('/hotels', adminController.getHotels);
-router.post('/add-hotel', adminController.addHotel);
-router.get('/guest/:id', adminController.getGuests);
-router.post('/guest/edit/:id', adminController.editGuest);
-router.get('/guest/view/:id', adminController.viewGuest);
-
-router.post('/login', login);
-router.get('/logout', logout);
-
-router.use(verifyToken); // Protect all routes below
+router.post('/hotels', upload.single('logo'), hotelValidationRules, validate, adminController.addHotel);
 router.get('/dashboard', isMainAdmin, adminController.dashboard);
 
+// Guest admin routes
+router.use('/guests', isGuestAdmin);
+router.get('/guests', adminController.getGuests);
+router.get('/guest/:id', adminController.viewGuest);
+router.post('/guest/edit/:id', adminController.editGuest);
+router.get('/guest-dashboard', isGuestAdmin, adminController.guestDashboard);
+
+// Register guest admin (main admin only)
+router.post('/register-guest-admin', isMainAdmin, authController.registerGuestAdmin);
 
 module.exports = router;

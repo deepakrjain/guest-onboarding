@@ -4,6 +4,8 @@ DigitalGuestOnboarding/
 │   ├── guestController.js
 ├── middleware/        
 │   ├── authMiddleware.js
+│   ├── uploadMiddleware.js  (for handling file uploads)
+│   ├── validationMiddleware.js  (for form validation)
 ├── models/             # MongoDB schemas
 │   ├── hotel.js
 │   ├── guest.js
