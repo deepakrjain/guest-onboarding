@@ -5,31 +5,16 @@ const jwt = require('jsonwebtoken');
 
 // Admin Login
 exports.login = async (req, res) => {
+    const { email, password } = req.body;
     try {
-        const { username, password } = req.body;
-
-        // Find the admin
-        const admin = await Admin.findOne({ username });
-        if (!admin) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+        const admin = await Admin.findOne({ email });
+        if (!admin || admin.password !== password) {
+            return res.status(401).send('Invalid credentials');
         }
 
-        // Compare passwords
-        const isMatch = await admin.comparePassword(password);
-        if (!isMatch) {
-            return res.status(401).json({ message: 'Invalid credentials' });
-        }
-
-        // Generate JWT
-        const token = jwt.sign(
-            { id: admin._id, username: admin.username, role: admin.role },
-            process.env.JWT_SECRET,
-            { expiresIn: '1d' }
-        );
-
-        // Set the token in cookies
-        res.cookie('token', token, { httpOnly: true });
-        res.redirect('/admin/dashboard');
+        const token = jwt.sign({ id: admin._id, role: admin.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
+        res.cookie('authToken', token, { httpOnly: true });
+        res.redirect(admin.role === 'mainAdmin' ? '/admin/dashboard' : '/guest/dashboard');
     } catch (error) {
         console.error(error);
         res.status(500).send('Internal Server Error');
@@ -38,8 +23,8 @@ exports.login = async (req, res) => {
 
 // Admin Logout
 exports.logout = (req, res) => {
-    res.clearCookie('token');
-    res.redirect('/login');
+    res.clearCookie('authToken');
+    res.redirect('/admin/login');
 };
 
 // Add a new hotel
