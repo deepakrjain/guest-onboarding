@@ -4,6 +4,8 @@ const adminController = require('../controllers/adminController');
 const { verifyToken, isMainAdmin } = require('../middleware/authMiddleware');
 const { login, logout } = require('../controllers/adminController');
 const { body, validationResult } = require('express-validator');
+const multer = require('multer');
+const upload = multer({ dest: 'public/uploads/' });
 
 router.post(
     '/add-hotel',
@@ -26,6 +28,8 @@ router.get('/login', (req, res) => {
     res.render('admin/login');
 });
 
+router.post('/add-hotel', upload.single('logo'), adminController.addHotel);
+router.get('/hotels', adminController.getHotels);
 router.post('/add-hotel', adminController.addHotel);
 router.get('/guest/:id', adminController.getGuests);
 router.post('/guest/edit/:id', adminController.editGuest);

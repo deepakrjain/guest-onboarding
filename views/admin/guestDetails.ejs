@@ -1,11 +1,10 @@
-<table class="table table-bordered">
+<h1>Guest Details</h1>
+<table>
     <thead>
         <tr>
-            <th>Full Name</th>
+            <th>Name</th>
             <th>Mobile</th>
             <th>Purpose</th>
-            <th>Stay Dates</th>
-            <th>Email</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -13,13 +12,10 @@
         <% guests.forEach(guest => { %>
             <tr>
                 <td><%= guest.fullName %></td>
-                <td><%= guest.mobile %></td>
+                <td><%= guest.mobileNumber %></td>
                 <td><%= guest.purpose %></td>
-                <td><%= guest.fromDate %> - <%= guest.toDate %></td>
-                <td><%= guest.email %></td>
                 <td>
-                    <a href="/admin/guest/view/<%= guest._id %>">View</a> |
-                    <a href="/admin/guest/edit/<%= guest._id %>">Edit</a>
+                    <a href="/admin/edit-guest/<%= guest._id %>">Edit</a>
                 </td>
             </tr>
         <% }) %>

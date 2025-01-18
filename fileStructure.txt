@@ -12,6 +12,8 @@ DigitalGuestOnboarding/
 │   ├── adminRoutes.js
 │   ├── guestRoutes.js
 ├── public/             # Static files
+│   ├── scripts/
+│   │   ├── validation.js
 │   ├── styles.css
 ├── views/              # EJS templates
 │   ├── admin/

@@ -1,28 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <title>Guest Form</title>
     <link rel="stylesheet" href="/public/styles.css">
 </head>
+
 <body>
-    <h1>Welcome to <%= hotel.name %></h1>
-    <img src="/uploads/<%= hotel.logo %>" width="100" height="100">
-    <p><%= hotel.address %></p>
-    <form action="/guest/<%= hotel._id %>" method="POST">
-        <input type="text" name="fullName" placeholder="Full Name" required>
-        <input type="tel" name="mobile" placeholder="Mobile Number" required>
-        <input type="text" name="address" placeholder="Address" required>
+    <h1>Welcome to <%= hotel.name %>
+    </h1>
+    <form method="POST">
+        <input type="text" name="fullName" placeholder="Full Name" required />
+        <input type="text" name="mobileNumber" placeholder="Mobile Number" required />
+        <input type="text" name="address" placeholder="Address" required />
         <select name="purpose" required>
             <option value="Business">Business</option>
             <option value="Personal">Personal</option>
             <option value="Tourist">Tourist</option>
         </select>
-        <input type="date" name="stayFrom" required>
-        <input type="date" name="stayTo" required>
-        <input type="email" name="email" placeholder="Email ID" required>
-        <input type="text" name="idProofNumber" placeholder="ID Proof Number" required>
+        <input type="date" name="stayDates" required />
+        <input type="email" name="email" placeholder="Email" required />
+        <input type="text" name="idProof" placeholder="ID Proof" required />
         <button type="submit">Submit</button>
     </form>
+
     <script src="/public/scripts/validation.js"></script>
 </body>
+
 </html>

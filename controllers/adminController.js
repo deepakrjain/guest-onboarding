@@ -27,22 +27,21 @@ exports.logout = (req, res) => {
     res.redirect('/admin/login');
 };
 
-// Add a new hotel
+// Add Hotel
 exports.addHotel = async (req, res) => {
     try {
         const { name, address } = req.body;
         const logo = req.file ? req.file.filename : null;
 
-        // Create a new hotel entry
         const hotel = new Hotel({ name, address, logo });
         await hotel.save();
 
         // Generate QR Code
-        const qrCodeUrl = await QRCode.toDataURL(`${req.protocol}://${req.get('host')}/guest/${hotel._id}`);
-        hotel.qrCodeUrl = qrCodeUrl;
+        const qrCode = await QRCode.toDataURL(`http://localhost:3000/guest/${hotel._id}`);
+        hotel.qrCode = qrCode;
         await hotel.save();
 
-        res.redirect('/admin/dashboard');
+        res.redirect('/admin/hotels');
     } catch (error) {
         console.error(error);
         res.status(500).send('Internal Server Error');
@@ -91,15 +90,13 @@ exports.viewGuest = async (req, res) => {
     }
 };
 
+// View Hotels
 exports.getHotels = async (req, res) => {
     try {
         const hotels = await Hotel.find();
-        for (const hotel of hotels) {
-            hotel.qrCode = await QRCode.toDataURL(`/guest/form/${hotel._id}`);
-        }
-        res.render('admin/dashboard', { hotels });
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Server Error');
+        res.render('admin/hotels', { hotels });
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Internal Server Error');
     }
 };
