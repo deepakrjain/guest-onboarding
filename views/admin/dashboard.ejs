@@ -1,20 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= pageTitle %></title>
-    <link rel="stylesheet" href="/styles.css">
-</head>
-<body>
-    <header>
-        <h1>Admin Dashboard</h1>
-    </header>
-    <main>
-        <h2>Total Hotels: <%= hotels.length %></h2>
-        <h2>Total Guests: <%= guests.length %></h2>
-        <a href="/admin/hotels">Manage Hotels</a>
-        <a href="/admin/guests">View Guests</a>
-    </main>
-</body>
-</html>
+<header>
+    <h1>Admin Dashboard</h1>
+</header>
+<main>
+    <h2>Total Hotels: <%= hotels.length %></h2>
+    <h2>Total Guests: <%= guests.length %></h2>
+    <a href="/admin/hotels" class="btn btn-primary">Manage Hotels</a>
+    <a href="/admin/guests" class="btn btn-secondary">View Guests</a>
+</main>

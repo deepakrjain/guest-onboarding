@@ -1,27 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= pageTitle %></title>
+    <title>
+        <%= pageTitle %>
+    </title>
     <link rel="stylesheet" href="/styles.css">
 </head>
+
 <body>
-    <h1>Guest Registration Form</h1>
-    <form action="/guest/submit" method="POST">
-        <label for="hotel">Select Hotel:</label>
-        <select name="hotel" id="hotel" required>
-            <% hotels.forEach(hotel => { %>
-                <option value="<%= hotel._id %>"><%= hotel.name %></option>
-            <% }); %>
-        </select>
-        <label for="fullName">Full Name:</label>
-        <input type="text" id="fullName" name="fullName" required>
-        <label for="email">Email:</label>
-        <input type="email" id="email" name="email" required>
-        <label for="idProof">ID Proof:</label>
-        <input type="text" id="idProof" name="idProof" required>
-        <button type="submit">Submit</button>
-    </form>
+        <h1>Guest Registration Form</h1>
+        <form method="POST" action="/guest/submit">
+            <label for="hotel">Select Hotel:</label>
+            <select name="hotel" id="hotel" required>
+                <% if (hotels.length> 0) { %>
+                    <% hotels.forEach(hotel=> { %>
+                        <option value="<%= hotel._id %>">
+                            <%= hotel.name %>
+                        </option>
+                        <% }); %>
+                            <% } else { %>
+                                <option value="">No hotels available</option>
+                                <% } %>
+            </select>
+            <label for="fullName">Full Name:</label>
+            <input type="text" name="fullName" id="fullName" required>
+            <!-- Additional fields -->
+            <button type="submit">Register</button>
+        </form>
 </body>
+
 </html>

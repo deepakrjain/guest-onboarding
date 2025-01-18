@@ -10,7 +10,30 @@ const { hotelValidationRules, validate } = require('../middleware/validationMidd
 
 // Auth routes
 router.get('/login', (req, res) => res.render('admin/login'));
-router.post('/login', authController.login);
+
+// Login route with error handling
+router.post('/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+
+        // Attempt login using authController.login
+        const user = await authController.login(username, password);
+
+        if (user) {
+            // If login successful, redirect to the dashboard
+            res.redirect('/admin/dashboard');
+        } else {
+            // If authentication fails, pass error message to the login page
+            res.render('admin/login', { error: 'Invalid username or password' });
+        }
+    } catch (error) {
+        // Log and pass the error to the login page
+        console.error('Login error:', error);
+        res.render('admin/login', { error: 'An error occurred during login' });
+    }
+});
+
+// Logout route
 router.get('/logout', authController.logout);
 
 // Protected routes

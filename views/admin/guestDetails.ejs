@@ -1,5 +1,6 @@
+
 <h1>Guest Details</h1>
-<table>
+<table class="table">
     <thead>
         <tr>
             <th>Name</th>
@@ -15,7 +16,7 @@
                 <td><%= guest.mobileNumber %></td>
                 <td><%= guest.purpose %></td>
                 <td>
-                    <a href="/admin/edit-guest/<%= guest._id %>">Edit</a>
+                    <a href="/admin/edit-guest/<%= guest._id %>" class="btn btn-primary btn-sm">Edit</a>
                 </td>
             </tr>
         <% }) %>

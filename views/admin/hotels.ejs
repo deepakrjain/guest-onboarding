@@ -1,45 +1,34 @@
-<!DOCTYPE html>
-<html lang="en">
 
-<head>
-    <title>Admin Dashboard</title>
-    <link rel="stylesheet" href="/public/styles.css">
-</head>
-
-<body>
-    <h1>Manage Hotels</h1>
-    <form method="POST" action="/admin/add-hotel" enctype="multipart/form-data">
-        <input type="text" name="name" placeholder="Hotel Name" required />
-        <input type="text" name="address" placeholder="Address" required />
-        <input type="file" name="logo" />
-        <button type="submit">Add Hotel</button>
-    </form>
-    <table>
-        <thead>
+<h1>Manage Hotels</h1>
+<form method="POST" action="/admin/add-hotel" enctype="multipart/form-data">
+    <div class="mb-3">
+        <input type="text" name="name" class="form-control" placeholder="Hotel Name" required />
+    </div>
+    <div class="mb-3">
+        <input type="text" name="address" class="form-control" placeholder="Address" required />
+    </div>
+    <div class="mb-3">
+        <input type="file" name="logo" class="form-control" />
+    </div>
+    <button type="submit" class="btn btn-primary">Add Hotel</button>
+</form>
+<table class="table mt-4">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Address</th>
+            <th>Logo</th>
+            <th>QR Code</th>
+        </tr>
+    </thead>
+    <tbody>
+        <% hotels.forEach(hotel => { %>
             <tr>
-                <th>Name</th>
-                <th>Address</th>
-                <th>Logo</th>
-                <th>QR Code</th>
+                <td><%= hotel.name %></td>
+                <td><%= hotel.address %></td>
+                <td><img src="/uploads/<%= hotel.logo %>" alt="Logo" width="50" /></td>
+                <td><img src="<%= hotel.qrCode %>" alt="QR Code" width="50" /></td>
             </tr>
-        </thead>
-        <tbody>
-            <% hotels.forEach(hotel=> { %>
-                <tr>
-                    <td>
-                        <%= hotel.name %>
-                    </td>
-                    <td>
-                        <%= hotel.address %>
-                    </td>
-                    <td><img src="/uploads/<%= hotel.logo %>" alt="Logo" width="50" /></td>
-                    <td><img src="<%= hotel.qrCode %>" alt="QR Code" width="50" /></td>
-                </tr>
-                <% }) %>
-        </tbody>
-    </table>
-
-    <script src="/public/scripts/validation.js"></script>
-</body>
-
-</html>
+        <% }) %>
+    </tbody>
+</table>

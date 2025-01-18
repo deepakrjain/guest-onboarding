@@ -1,34 +1,41 @@
-DigitalGuestOnboarding/
-├── controllers/        # Business logic (e.g., hotel, guest)
-│   ├── adminController.js
-│   ├── guestController.js
-├── middleware/        
-│   ├── authMiddleware.js
-│   ├── uploadMiddleware.js  (for handling file uploads)
-│   ├── validationMiddleware.js  (for form validation)
-├── models/             # MongoDB schemas
-│   ├── hotel.js
-│   ├── guest.js
-│   ├── admin.js
-├── routes/             # Express routes
-│   ├── adminRoutes.js
-│   ├── guestRoutes.js
-├── utils/ 
-│   ├── qrCode.js
-├── public/             # Static files
-│   ├── scripts/
-│   │   ├── validation.js
-│   ├── styles.css
-├── views/              # EJS templates
-│   ├── admin/
-│   │   ├── dashboard.ejs
-│   │   ├── guestDetails.ejs
-│   │   ├── editGuest.ejs
-│   │   ├── login.ejs
-│   │   ├── hotels.ejs
-│   ├── guest/
-│   │   ├── form.ejs
-│   │   ├── thankyou.ejs
-├── .env                # Environment variables
-├── app.js              # Main server file
-└── package.json        # Node.js dependencies
+├── .env
+├── app.js
+├── config
+    └── db.js
+├── controllers
+    ├── adminController.js
+    ├── authController.js
+    └── guestController.js
+├── fileStructure.txt
+├── middleware
+    ├── authMiddleware.js
+    ├── uploadMiddleware.js
+    └── validationMiddleware.js
+├── models
+    ├── admin.js
+    ├── guest.js
+    └── hotel.js
+├── package-lock.json
+├── package.json
+├── public
+    ├── scripts
+    │   └── validation.js
+    └── styles.css
+├── routes
+    ├── adminRoutes.js
+    └── guestRoutes.js
+├── testBcrypt.js
+├── utils
+    └── qrCode.js
+└── views
+    ├── admin
+        ├── dashboard.ejs
+        ├── editGuest.ejs
+        ├── guestDetails.ejs
+        ├── hotels.ejs
+        ├── login.ejs
+        └── viewGuest.ejs
+    ├── guest
+        ├── form.ejs
+        └── thankyou.ejs
+    └── index.ejs

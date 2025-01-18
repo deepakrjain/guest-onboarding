@@ -4,14 +4,14 @@ const bcrypt = require('bcryptjs');
 
 exports.login = async (req, res) => {
     try {
-        const { email, password } = req.body;
-        
-        // Find admin
-        const admin = await Admin.findOne({ email }).populate('hotel');
+        const { username, password } = req.body; // Use username instead of email
+
+        // Find admin by username
+        const admin = await Admin.findOne({ username }).populate('hotel');
         if (!admin) {
             return res.render('admin/login', {
                 error: 'Invalid credentials',
-                email
+                username
             });
         }
 
@@ -20,7 +20,7 @@ exports.login = async (req, res) => {
         if (!isMatch) {
             return res.render('admin/login', {
                 error: 'Invalid credentials',
-                email
+                username
             });
         }
 
@@ -48,7 +48,6 @@ exports.login = async (req, res) => {
         } else {
             res.redirect('/admin/guest-dashboard');
         }
-
     } catch (error) {
         console.error('Login error:', error);
         res.render('admin/login', {

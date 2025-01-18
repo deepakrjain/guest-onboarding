@@ -1,16 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>Admin Login</title>
-    <link rel="stylesheet" href="/public/styles.css">
-</head>
-<body>
-    <h1>Admin Login</h1>
-    <form method="POST" action="/admin/login">
-        <input type="email" name="email" placeholder="Email" required />
-        <input type="password" name="password" placeholder="Password" required />
-        <button type="submit">Login</button>
-    </form>
-    
-</body>
-</html>
+
+<h1>Admin Login</h1>
+<form method="POST" action="/admin/login">
+    <div class="mb-3">
+        <input type="text" name="username" class="form-control" placeholder="Username" required />
+    </div>
+    <div class="mb-3">
+        <input type="password" name="password" class="form-control" placeholder="Password" required />
+    </div>
+    <button type="submit" class="btn btn-primary">Login</button>
+    <% if (error) { %>
+        <p style="color: red;"><%= error %></p>
+    <% } %>
+</form>
