@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const generateQRCode = require('../utils/qrCode');
+const Hotel = require('../models/hotel');
 const adminController = require('../controllers/adminController');
 const authController = require('../controllers/authController');
 const { verifyToken, isMainAdmin, isGuestAdmin } = require('../middleware/authMiddleware');
@@ -17,7 +19,29 @@ router.use(verifyToken);
 // Main admin routes
 router.use('/hotels', isMainAdmin);
 router.get('/hotels', adminController.getHotels);
-router.post('/hotels', upload.single('logo'), hotelValidationRules, validate, adminController.addHotel);
+router.post(
+    '/hotels',
+    upload.single('logo'),
+    hotelValidationRules,
+    validate,
+    async (req, res) => {
+        try {
+            const { name, address } = req.body;
+            const logo = req.file.filename;
+            const qrCodeUrl = `${process.env.BASE_URL}/guest/form?hotelId=${name}`;
+            const qrCode = await generateQRCode(qrCodeUrl);
+
+            const hotel = new Hotel({ name, address, logo, qrCode });
+            await hotel.save();
+
+            res.redirect('/admin/dashboard');
+        } catch (error) {
+            console.error('Error adding hotel:', error);
+            res.status(500).send('Internal Server Error');
+        }
+    }
+);
+
 router.get('/dashboard', isMainAdmin, adminController.dashboard);
 
 // Guest admin routes

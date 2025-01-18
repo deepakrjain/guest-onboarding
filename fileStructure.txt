@@ -13,6 +13,8 @@ DigitalGuestOnboarding/
 ├── routes/             # Express routes
 │   ├── adminRoutes.js
 │   ├── guestRoutes.js
+├── utils/ 
+│   ├── qrCode.js
 ├── public/             # Static files
 │   ├── scripts/
 │   │   ├── validation.js

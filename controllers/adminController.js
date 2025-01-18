@@ -86,16 +86,39 @@ exports.addHotel = async (req, res) => {
     }
 };
 
+// Add this new function - don't replace entire file
+exports.generateQRCode = async (req, res) => {
+    try {
+        const hotel = await Hotel.findById(req.params.hotelId);
+        if (!hotel) {
+            return res.status(404).json({ message: 'Hotel not found' });
+        }
+
+        const guestFormUrl = `${process.env.BASE_URL}/guest/${hotel._id}`;
+        const qrCode = await QRCode.toDataURL(guestFormUrl);
+        
+        hotel.qrCode = qrCode;
+        await hotel.save();
+
+        res.json({ qrCode });
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Error generating QR code');
+    }
+};
+
 // View Hotels
+
 exports.getHotels = async (req, res) => {
     try {
         const hotels = await Hotel.find();
         res.render('admin/hotels', { hotels });
     } catch (error) {
-        console.error(error);
+        console.error('Error fetching hotels:', error);
         res.status(500).send('Internal Server Error');
     }
 };
+
 
 // Guest Management
 exports.getGuests = async (req, res) => {

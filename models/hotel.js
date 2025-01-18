@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
 
 const hotelSchema = new mongoose.Schema({
-    name: String,
-    address: String,
-    logo: String,
-    qrCode: String,
+    name: { type: String, required: true },
+    address: { type: String, required: true },
+    logo: { type: String, required: true },
+    qrCode: { type: String, required: true },
 });
 
 module.exports = mongoose.model('Hotel', hotelSchema);
