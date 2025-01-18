@@ -1,0 +1,28 @@
+DigitalGuestOnboarding/
+├── controllers/        # Business logic (e.g., hotel, guest)
+│   ├── adminController.js
+│   ├── guestController.js
+├── middleware/        
+│   ├── authMiddleware.js
+├── models/             # MongoDB schemas
+│   ├── hotel.js
+│   ├── guest.js
+│   ├── admin.js
+├── routes/             # Express routes
+│   ├── adminRoutes.js
+│   ├── guestRoutes.js
+├── public/             # Static files
+│   ├── styles.css
+├── views/              # EJS templates
+│   ├── admin/
+│   │   ├── dashboard.ejs
+│   │   ├── guestDetails.ejs
+│   │   ├── editGuest.ejs
+│   │   ├── login.ejs
+│   │   ├── hotels.ejs
+│   ├── guest/
+│   │   ├── form.ejs
+│   │   ├── thankyou.ejs
+├── .env                # Environment variables
+├── app.js              # Main server file
+└── package.json        # Node.js dependencies

@@ -1,0 +1,20 @@
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Hotel Name</th>
+            <th>Address</th>
+            <th>Logo</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        <% hotels.forEach(hotel => { %>
+            <tr>
+                <td><%= hotel.hotelName %></td>
+                <td><%= hotel.address %></td>
+                <td><img src="<%= hotel.qrCode %>" width="50" height="50"></td>
+                <td><a href="/admin/view/<%= hotel._id %>">View</a> | <a href="/admin/edit/<%= hotel._id %>">Edit</a></td>
+            </tr>
+        <% }) %>
+    </tbody>
+</table>

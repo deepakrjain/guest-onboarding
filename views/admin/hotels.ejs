@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="/public/styles.css">
+</head>
+<body>
+    <h1>Registered Hotels</h1>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Address</th>
+            <th>Logo</th>
+            <th>QR Code</th>
+        </tr>
+        <% hotels.forEach(hotel => { %>
+        <tr>
+            <td><%= hotel.name %></td>
+            <td><%= hotel.address %></td>
+            <td><img src="/public/uploads/<%= hotel.logo %>" alt="Logo" width="50"></td>
+            <td><img src="<%= hotel.qrCodeUrl %>" alt="QR Code" width="100"></td>
+        </tr>
+        <% }) %>
+    </table>
+    <h2>Add New Hotel</h2>
+    <form action="/admin/add-hotel" method="POST" enctype="multipart/form-data">
+        <input type="text" name="name" placeholder="Hotel Name" required>
+        <input type="text" name="address" placeholder="Address" required>
+        <input type="file" name="logo" accept="image/*" required>
+        <button type="submit">Add Hotel</button>
+    </form>
+</body>
+</html>
