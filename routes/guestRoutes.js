@@ -1,27 +1,27 @@
 const express = require('express');
 const router = express.Router();
 const guestController = require('../controllers/guestController');
-const Hotel = require('../models/hotel'); // Ensure this is properly imported
+const Hotel = require('../models/hotel');
 
-// Guest form routes
-router.get('/:hotelId', guestController.showForm);
-router.post('/:hotelId', guestController.submitForm);
-
-// Guest list and form routes
-router.get('/guests', guestController.getGuests);
+// Static route to render the guest registration form
 router.get('/form', async (req, res) => {
     try {
-        const { hotelId } = req.query;
-        const hotel = await Hotel.findById(hotelId);
-        if (!hotel) {
-            return res.status(404).send('Hotel not found');
-        }
-        res.render('guest/form', { hotel });
-    } catch (error) {
-        console.error('Error loading guest form:', error);
+        const hotels = await Hotel.find(); // Fetch all hotels for dropdown selection
+        res.render('guest/form', { hotels, pageTitle: 'Guest Registration' });
+    } catch (err) {
+        console.error(err);
         res.status(500).send('Internal Server Error');
     }
 });
-router.post('/form', guestController.submitForm); // Use correct method here
+
+// Route to submit the registration form
+router.post('/form', guestController.submitForm);
+
+// Route to get the list of guests (Admin)
+router.get('/guests', guestController.getGuests);
+
+// Dynamic route to show the form for a specific hotel
+router.get('/:hotelId', guestController.showForm);
+router.post('/:hotelId', guestController.submitForm);
 
 module.exports = router;

@@ -5,20 +5,15 @@ const QRCode = require('qrcode');
 // Main Admin Dashboard
 exports.dashboard = async (req, res) => {
     try {
-        const hotels = await Hotel.find();
-        const totalHotels = await Hotel.countDocuments();
-        const totalGuests = await Guest.countDocuments();
-        
+        const hotels = await Hotel.find(); // Fetch hotels for stats
+        const guests = await Guest.find(); // Fetch total guests
         res.render('admin/dashboard', {
+            pageTitle: 'Admin Dashboard',
             hotels,
-            stats: {
-                totalHotels,
-                totalGuests,
-                recentActivity: await Guest.find().sort('-createdAt').limit(5)
-            }
+            guests,
         });
-    } catch (error) {
-        console.error(error);
+    } catch (err) {
+        console.error(err);
         res.status(500).send('Internal Server Error');
     }
 };

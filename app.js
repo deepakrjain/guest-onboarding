@@ -4,6 +4,11 @@ const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const path = require('path');
 
+
+const connectDB = require('./config/db');
+// Connect to MongoDB
+connectDB();
+
 // Initialize app
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,9 +21,10 @@ app.use('/public', express.static(path.join(__dirname, 'public')));
 // Set View Engine
 app.set('view engine', 'ejs');
 
-app.get('/', async (req, res) => {
-    res.send('Welcome to the Digital Guest Onboarding System!');
+app.get('/', (req, res) => {
+    res.render('index', { pageTitle: 'Welcome to the Digital Guest Onboarding System' });
 });
+
 
 // MongoDB Connection (Single Call)
 mongoose

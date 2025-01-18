@@ -3,16 +3,10 @@ const Hotel = require('../models/hotel');
 
 exports.showForm = async (req, res) => {
     try {
-        const hotel = await Hotel.findById(req.params.hotelId);
-        if (!hotel) return res.status(404).send('Hotel not found');
-
-        res.render('guest/form', { 
-            hotel,
-            pageTitle: `Welcome to ${hotel.name}`,
-            formData: {} // For re-populating form on validation errors
-        });
-    } catch (error) {
-        console.error(error);
+        const hotels = await Hotel.find(); // Fetch hotels for dropdown in form
+        res.render('guest/form', { hotels, pageTitle: 'Guest Registration' });
+    } catch (err) {
+        console.error(err);
         res.status(500).send('Internal Server Error');
     }
 };
