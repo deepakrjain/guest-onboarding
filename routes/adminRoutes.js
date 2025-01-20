@@ -5,10 +5,11 @@ const Hotel = require('../models/hotel');
 const adminController = require('../controllers/adminController');
 const authController = require('../controllers/authController');
 const { verifyToken, isMainAdmin, isGuestAdmin } = require('../middleware/authMiddleware');
-const { upload } = require('../middleware/uploadMiddleware');
+const upload = require('../middleware/uploadMiddleware');
 const { hotelValidationRules, validate } = require('../middleware/validationMiddleware');
 
 // Auth routes
+router.post('/admin/login', authController.login);
 router.get('/login', (req, res) => res.render('admin/login'));
 
 // Login route with error handling
@@ -44,13 +45,13 @@ router.use('/hotels', isMainAdmin);
 router.get('/hotels', adminController.getHotels);
 router.post(
     '/hotels',
-    upload.single('logo'),
+    upload.single('logo'), // Handles file upload for the "logo" field
     hotelValidationRules,
     validate,
     async (req, res) => {
         try {
             const { name, address } = req.body;
-            const logo = req.file.filename;
+            const logo = req.file.filename; // The uploaded file's name
             const qrCodeUrl = `${process.env.BASE_URL}/guest/form?hotelId=${name}`;
             const qrCode = await generateQRCode(qrCodeUrl);
 
@@ -66,6 +67,14 @@ router.post(
 );
 
 router.get('/dashboard', isMainAdmin, adminController.dashboard);
+
+
+// routes/adminRoutes.js
+
+// Add these routes
+router.delete('/hotels/:id', isMainAdmin, adminController.deleteHotel);
+router.get('/search/guests', verifyToken, adminController.searchGuests);
+
 
 // Guest admin routes
 router.use('/guests', isGuestAdmin);

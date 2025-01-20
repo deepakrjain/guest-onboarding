@@ -5,16 +5,33 @@ const QRCode = require('qrcode');
 // Main Admin Dashboard
 exports.dashboard = async (req, res) => {
     try {
-        const hotels = await Hotel.find(); // Fetch hotels for stats
-        const guests = await Guest.find(); // Fetch total guests
+        const hotels = await Hotel.find();
+        const hotelsWithStats = await Promise.all(
+            hotels.map(async (hotel) => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const [todayGuests, totalGuests] = await Promise.all([
+                    Guest.countDocuments({
+                        hotel: hotel._id,
+                        'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) }
+                    }),
+                    Guest.countDocuments({ hotel: hotel._id })
+                ]);
+                return { ...hotel.toObject(), todayGuests, totalGuests };
+            })
+        );
+
         res.render('admin/dashboard', {
             pageTitle: 'Admin Dashboard',
-            hotels,
-            guests,
+            hotels: hotelsWithStats,
+            guests: await Guest.find()
         });
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Internal Server Error');
+    } catch (error) {
+        console.error('Error loading dashboard:', error);
+        res.status(500).render('index', {
+            pageTitle: 'Error',
+            message: 'An error occurred while loading the dashboard'
+        });
     }
 };
 
@@ -59,25 +76,71 @@ exports.guestDashboard = async (req, res) => {
     }
 };
 
-// Add Hotel
 exports.addHotel = async (req, res) => {
+    const { name, address } = req.body;
+    const logo = req.file.path; // Assuming file upload is handled
+    const newHotel = await Hotel.create({ name, address, logo });
+    
+    // Generate QR code for hotel-specific landing page
+    const qrCode = await QRCode.toDataURL(`http://localhost:3000/hotels/${newHotel.id}`);
+    newHotel.qrCode = qrCode;
+    await newHotel.save();
+    
+    res.redirect('/admin/hotels');
+};
+
+exports.getHotels = async (req, res) => {
+    const hotels = await Hotel.findAll(); // Fetch from database
+    res.render('admin/hotels', { hotels });
+};
+
+exports.deleteHotel = async (req, res) => {
     try {
-        const { name, address } = req.body;
-        const logo = req.file ? `/uploads/${req.file.filename}` : null;
+        const hotel = await Hotel.findById(req.params.id);
+        
+        if (!hotel) {
+            return res.status(404).json({ message: 'Hotel not found' });
+        }
 
-        const hotel = new Hotel({ name, address, logo });
-        await hotel.save();
+        // Delete associated files
+        if (hotel.logo) {
+            fs.unlink(`public/uploads/${hotel.logo}`, err => {
+                if (err) console.error('Error deleting logo:', err);
+            });
+        }
 
-        // Generate QR Code
-        const qrUrl = `${process.env.BASE_URL}/guest/${hotel._id}`;
-        const qrCode = await QRCode.toDataURL(qrUrl);
-        hotel.qrCode = qrCode;
-        await hotel.save();
+        // Delete associated guests
+        await Guest.deleteMany({ hotel: hotel._id });
 
-        res.redirect('/admin/hotels');
+        await hotel.remove();
+        
+        res.json({ success: true });
     } catch (error) {
         console.error(error);
-        res.status(500).send('Internal Server Error');
+        res.status(500).json({ message: 'Error deleting hotel' });
+    }
+};
+
+exports.searchGuests = async (req, res) => {
+    try {
+        const { query } = req.query;
+        const hotelId = req.user.role === 'mainAdmin' ? req.query.hotelId : req.user.hotelId;
+
+        const searchCriteria = {
+            hotel: hotelId,
+            $or: [
+                { fullName: new RegExp(query, 'i') },
+                { email: new RegExp(query, 'i') },
+                { mobileNumber: new RegExp(query, 'i') }
+            ]
+        };
+
+        const guests = await Guest.find(searchCriteria).limit(10);
+        
+        res.json(guests);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error searching guests' });
     }
 };
 
@@ -101,19 +164,6 @@ exports.generateQRCode = async (req, res) => {
         res.status(500).send('Error generating QR code');
     }
 };
-
-// View Hotels
-
-exports.getHotels = async (req, res) => {
-    try {
-        const hotels = await Hotel.find();
-        res.render('admin/hotels', { hotels });
-    } catch (error) {
-        console.error('Error fetching hotels:', error);
-        res.status(500).send('Internal Server Error');
-    }
-};
-
 
 // Guest Management
 exports.getGuests = async (req, res) => {

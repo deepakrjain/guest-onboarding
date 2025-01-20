@@ -4,9 +4,14 @@ const bcrypt = require('bcryptjs');
 
 exports.login = async (req, res) => {
     try {
-        const { username, password } = req.body; // Use username instead of email
+        if (!req.body || !req.body.username || !req.body.password) {
+            return res.render('admin/login', {
+                error: 'Username and password are required.'
+            });
+        }
 
-        // Find admin by username
+        const { username, password } = req.body;
+
         const admin = await Admin.findOne({ username }).populate('hotel');
         if (!admin) {
             return res.render('admin/login', {
@@ -15,7 +20,6 @@ exports.login = async (req, res) => {
             });
         }
 
-        // Verify password
         const isMatch = await bcrypt.compare(password, admin.password);
         if (!isMatch) {
             return res.render('admin/login', {
@@ -24,30 +28,19 @@ exports.login = async (req, res) => {
             });
         }
 
-        // Generate JWT
         const token = jwt.sign(
-            { 
-                id: admin._id,
-                role: admin.role,
-                hotelId: admin.hotel?._id 
-            },
+            { id: admin._id, role: admin.role, hotelId: admin.hotel?._id },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
 
-        // Set cookie
         res.cookie('token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            maxAge: 24 * 60 * 60 * 1000 // 24 hours
+            maxAge: 24 * 60 * 60 * 1000
         });
 
-        // Redirect based on role
-        if (admin.role === 'mainAdmin') {
-            res.redirect('/admin/dashboard');
-        } else {
-            res.redirect('/admin/guest-dashboard');
-        }
+        res.redirect(admin.role === 'mainAdmin' ? '/admin/dashboard' : '/admin/guest-dashboard');
     } catch (error) {
         console.error('Login error:', error);
         res.render('admin/login', {

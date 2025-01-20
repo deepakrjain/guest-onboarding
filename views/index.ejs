@@ -1,6 +1,9 @@
 
 <div class="text-center">
     <h1>Welcome to the Digital Guest Onboarding System</h1>
+    <% if (message) { %>
+        <div class="alert alert-danger"><%= message %></div>
+    <% } %>
     <div>
         <a href="/guest/form" class="btn btn-primary">Guest Registration</a>
         <a href="/admin/login" class="btn btn-secondary">Admin Login</a>

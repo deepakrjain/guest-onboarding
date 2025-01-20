@@ -39,3 +39,4 @@
         ├── form.ejs
         └── thankyou.ejs
     └── index.ejs
+    └── layout.ejs

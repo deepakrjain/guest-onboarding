@@ -1,18 +1,24 @@
 const jwt = require('jsonwebtoken');
 
 // Middleware to verify JWT
+// Middleware to verify JWT
 exports.verifyToken = (req, res, next) => {
-    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
-    if (!token) {
-        return res.status(401).json({ message: 'Access Denied. Please log in.' });
-    }
-
     try {
+        const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+        if (!token) {
+            return res.status(401).render('admin/login', {
+                error: 'Access Denied. Please log in.',
+            });
+        }
+
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded;
         next();
     } catch (error) {
-        res.status(403).json({ message: 'Invalid or expired token.' });
+        console.error('JWT Verification Error:', error);
+        res.status(403).render('admin/login', {
+            error: 'Invalid or expired token. Please log in again.',
+        });
     }
 };
 
