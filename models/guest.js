@@ -41,9 +41,13 @@ const guestSchema = new mongoose.Schema({
         required: true,
         match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
     },
-    idProofNumber: { 
-        type: String, 
-        required: true 
+    idProofNumber: {
+        type: String,
+        required: true,
+        unique: true,
+        trim: true,
+        minlength: 4,
+        maxlength: 20,
     },
     createdAt: { 
         type: Date, 

@@ -1,52 +1,41 @@
-const jwt = require('jsonwebtoken');
-const Admin = require('../models/admin');
-const bcrypt = require('bcryptjs');
+const User = require('../models/admin');  // we're still importing from admin.js but it points to 'users' collection
 
-// Login function that uses res.render
 exports.login = async (req, res) => {
     try {
-        if (!req.body || !req.body.username || !req.body.password) {
-            return res.render('admin/login', {
-                error: 'Username and password are required.'
-            });
-        }
-
         const { username, password } = req.body;
+        console.log('Login attempt:', { username, password });
 
-        const admin = await Admin.findOne({ username }).populate('hotel');
-        if (!admin) {
+        const user = await User.findOne({ username: username });
+        console.log('Found user:', user);
+
+        if (!user) {
+            console.log('No user found with username:', username);
             return res.render('admin/login', {
-                error: 'Invalid credentials',
-                username
+                error: 'Invalid username or password'
             });
         }
 
-        const isMatch = await bcrypt.compare(password, admin.password);
-        if (!isMatch) {
+        if (user.password !== password) {
+            console.log('Password mismatch');
             return res.render('admin/login', {
-                error: 'Invalid credentials',
-                username
+                error: 'Invalid username or password'
             });
         }
 
-        const token = jwt.sign(
-            { id: admin._id, role: admin.role, hotelId: admin.hotel?._id },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
+        // Create session
+        req.session.user = {
+            id: user._id,
+            username: user.username,
+            role: user.role
+        };
+        console.log('Session created:', req.session.user);
 
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            maxAge: 24 * 60 * 60 * 1000
-        });
-
-        // Redirect based on role
-        res.redirect(admin.role === 'mainAdmin' ? '/admin/dashboard' : '/admin/guest-dashboard');
+        console.log('Login successful, redirecting to dashboard');
+        res.redirect('/admin/dashboard');
     } catch (error) {
         console.error('Login error:', error);
         res.render('admin/login', {
-            error: 'An error occurred during login. Please try again.'
+            error: 'An error occurred during login'
         });
     }
 };
@@ -54,31 +43,4 @@ exports.login = async (req, res) => {
 exports.logout = (req, res) => {
     res.clearCookie('token');
     res.redirect('/admin/login');
-};
-
-exports.registerGuestAdmin = async (req, res) => {
-    try {
-        const { username, email, password, hotelId } = req.body;
-        
-        // Check if email already exists
-        const existingAdmin = await Admin.findOne({ email });
-        if (existingAdmin) {
-            return res.status(400).json({ message: 'Email already registered' });
-        }
-
-        // Create new guest admin
-        const admin = new Admin({
-            username,
-            email,
-            password, // Will be hashed by the model's pre-save middleware
-            role: 'guestAdmin',
-            hotel: hotelId
-        });
-
-        await admin.save();
-        res.status(201).json({ message: 'Guest admin registered successfully' });
-    } catch (error) {
-        console.error('Registration error:', error);
-        res.status(500).json({ message: 'Error registering guest admin' });
-    }
 };

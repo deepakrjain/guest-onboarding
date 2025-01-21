@@ -30,13 +30,16 @@ exports.guestValidationRules = [
             return true;
         }),
     
-    body('stayDates.to')
+        body('stayDates.to')
         .isISO8601().withMessage('Invalid check-out date')
         .custom((value, { req }) => {
             const fromDate = new Date(req.body.stayDates.from);
             const toDate = new Date(value);
             if (toDate <= fromDate) {
                 throw new Error('Check-out date must be after check-in date');
+            }
+            if (toDate > new Date(fromDate.getTime() + 30 * 24 * 60 * 60 * 1000)) {
+                throw new Error('Stay cannot exceed 30 days');
             }
             return true;
         }),

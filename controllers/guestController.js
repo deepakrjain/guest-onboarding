@@ -53,8 +53,8 @@ exports.submitForm = async (req, res) => {
         const hotel = await Hotel.findById(req.params.hotelId);
         if (!hotel) {
             return res.status(404).render('index', {
-                pageTitle: 'Hotel Not Found',
-                message: 'The requested hotel could not be found.'
+                pageTitle: 'Error',
+                message: 'Hotel not found',
             });
         }
 
@@ -62,38 +62,37 @@ exports.submitForm = async (req, res) => {
         if (!errors.isEmpty()) {
             return res.render('guest/form', {
                 hotel,
-                pageTitle: `Welcome to ${hotel.name}`,
+                pageTitle: `Guest Registration - ${hotel.name}`,
                 formData: req.body,
-                errors: errors.array()
+                errors: errors.array(),
             });
         }
 
         const guest = new Guest({
             hotel: hotel._id,
-            fullName: req.body.fullName,
-            mobileNumber: req.body.mobileNumber,
-            email: req.body.email,
-            address: req.body.address,
+            fullName: req.body.fullName.trim(),
+            mobileNumber: req.body.mobileNumber.trim(),
+            email: req.body.email.trim(),
+            address: req.body.address.trim(),
             purpose: req.body.purpose,
             stayDates: {
                 from: req.body.stayDates.from,
-                to: req.body.stayDates.to
+                to: req.body.stayDates.to,
             },
-            idProofNumber: req.body.idProofNumber
+            idProofNumber: req.body.idProofNumber.trim(),
         });
 
         await guest.save();
 
         res.render('guest/thankyou', {
             pageTitle: 'Registration Successful',
-            guest,
-            hotel
+            fullName: guest.fullName,
         });
     } catch (err) {
-        console.error('Error submitting guest form:', err);
-        res.render('index', {
+        console.error('Guest form submission error:', err.message);
+        res.status(500).render('index', {
             pageTitle: 'Error',
-            message: 'An error occurred while processing your registration. Please try again.'
+            message: 'An error occurred while submitting the form. Please try again.',
         });
     }
 };

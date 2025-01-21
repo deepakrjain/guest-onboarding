@@ -1,4 +1,3 @@
-// app.js
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -8,11 +7,12 @@ const expressLayouts = require('express-ejs-layouts');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const app = express();
+const connectDB = require('./config/db');
 
 // Middleware and Static File Serving
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cookieParser());
-// Ensure bodyParser middleware is applied
+app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
@@ -25,16 +25,13 @@ app.set('layout', 'layout');
 
 // Session Configuration
 app.use(session({
-    secret: process.env.SESSION_SECRET || '1067',
+    secret: '1067',
     resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
+    saveUninitialized: true,
+    cookie: { secure: false }
 }));
 
-// Global Middleware for User and Flash Messages
+// Global Middleware
 app.use((req, res, next) => {
     res.locals.user = req.user || null;
     res.locals.error = null;
@@ -69,16 +66,20 @@ app.use((req, res) => {
     });
 });
 
-// Database Connection and Server Start
-mongoose
-    .connect(process.env.MONGO_URI)
-    .then(() => {
+// Initialize Database and Start Server
+const startServer = async () => {
+    try {
+        await connectDB();
         const PORT = process.env.PORT || 3000;
-        app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-    })
-    .catch((err) => {
-        console.error('Database connection error:', err);
+        app.listen(PORT, () => {
+            console.log(`Server running on http://localhost:${PORT}`);
+        });
+    } catch (error) {
+        console.error('Failed to start server:', error);
         process.exit(1);
-    });
+    }
+};
+
+startServer();
 
 module.exports = app;
