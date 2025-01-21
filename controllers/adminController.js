@@ -3,34 +3,49 @@ const Guest = require('../models/guest');
 const QRCode = require('qrcode');
 const path = require('path');
 // Main Admin Dashboard
+// Main Admin Dashboard
 exports.dashboard = async (req, res) => {
     try {
         const hotels = await Hotel.find();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Get total number of guests
+        const totalGuests = await Guest.countDocuments(); // Fetch total guest count
+
+        // Get today's check-ins
+        const todayCheckIns = await Guest.countDocuments({
+            'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
+        });
+
+        // Fetch hotels with today's guests and total guests
         const hotelsWithStats = await Promise.all(
             hotels.map(async (hotel) => {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const [todayGuests, totalGuests] = await Promise.all([
+                const [hotelTodayGuests, hotelTotalGuests] = await Promise.all([
                     Guest.countDocuments({
                         hotel: hotel._id,
-                        'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) }
+                        'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
                     }),
-                    Guest.countDocuments({ hotel: hotel._id })
+                    Guest.countDocuments({ hotel: hotel._id }),
                 ]);
-                return { ...hotel.toObject(), todayGuests, totalGuests };
+
+                return { ...hotel.toObject(), todayGuests: hotelTodayGuests, totalGuests: hotelTotalGuests };
             })
         );
 
+        // Pass data to the view
         res.render('admin/dashboard', {
             pageTitle: 'Admin Dashboard',
-            hotels: hotelsWithStats,
-            guests: await Guest.find()
+            hotels: hotelsWithStats,  // Send the list of hotels with stats
+            totalGuests,             // Send totalGuests count
+            todayCheckIns,           // Send today's check-ins count
         });
+
     } catch (error) {
         console.error('Error loading dashboard:', error);
         res.status(500).render('index', {
             pageTitle: 'Error',
-            message: 'An error occurred while loading the dashboard'
+            message: 'An error occurred while loading the dashboard.',
         });
     }
 };

@@ -18,7 +18,7 @@ app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
 // View Engine Setup
 app.set('view engine', 'ejs');
@@ -103,6 +103,7 @@ DigitalGuestOnboarding/
 │   ├── adminRoutes.js
 │   ├── guestRoutes.js
 ├── public/             # Static files
+│   ├── uploads/
 │   ├── scripts/
 │   │   ├── validation.js
 │   ├── styles.css
@@ -126,22 +127,8 @@ DigitalGuestOnboarding/
 1 | MONGO_URI=mongodb://localhost:27017/DigitalGuestOnboarding
 2 | JWT_SECRET=1067
 
-
 --------------------------------------------------------------------------------
-/testBcrypt.js:
---------------------------------------------------------------------------------
-1 | const bcrypt = require('bcrypt');
-2 | 
-3 | bcrypt.hash('password123', 10)
-4 |   .then(hash => {
-5 |     console.log('Hashed Password:', hash);
-6 |   })
-7 |   .catch(err => {
-8 |     console.error('Error:', err);
-9 |   });
 
-
---------------------------------------------------------------------------------
 ```
 
 # config\db.js
@@ -168,7 +155,7 @@ module.exports = connectDB;
 const Hotel = require('../models/hotel');
 const Guest = require('../models/guest');
 const QRCode = require('qrcode');
-
+const path = require('path');
 // Main Admin Dashboard
 exports.dashboard = async (req, res) => {
     try {
@@ -264,10 +251,14 @@ exports.addHotel = async (req, res) => {
 exports.getHotels = async (req, res) => {
     try {
         const hotels = await Hotel.find(); // Fetch all hotels from MongoDB
-        res.render('admin/hotels', { hotels });
+        res.render('admin/hotels', { hotels, error: null, user: req.user });
     } catch (error) {
         console.error('Error fetching hotels:', error.message);
-        res.status(500).render('admin/hotels', { hotels: [], error: 'Failed to fetch hotels' });
+        res.status(500).render('admin/hotels', { 
+            hotels: [], 
+            error: 'Failed to fetch hotels', 
+            user: req.user 
+        });
     }
 };
 
@@ -318,6 +309,7 @@ exports.searchGuests = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error searching guests' });
+
     }
 };
 
@@ -345,14 +337,16 @@ exports.generateQRCode = async (req, res) => {
 // Guest Management
 exports.getGuests = async (req, res) => {
     try {
-        const hotelId = req.user.role === 'mainAdmin' ? req.params.hotelId : req.user.hotelId;
-        const guests = await Guest.find({ hotel: hotelId }).sort('-createdAt');
-        const hotel = await Hotel.findById(hotelId);
-        
-        res.render('admin/guestDetails', { guests, hotel });
+        const guests = await Guest.find({ hotel: req.params.id });
+        const hotel = await Hotel.findById(req.params.id);
+        res.render('admin/guestDetails', { 
+            guests,
+            hotel,
+            user: req.user
+        });
     } catch (error) {
-        console.error(error);
-        res.status(500).send('Internal Server Error');
+        console.error('Error fetching hotel guests:', error);
+        res.redirect('/admin/hotels');
     }
 };
 
@@ -510,19 +504,26 @@ exports.getGuests = (req, res) => {
 
 exports.submitForm = async (req, res) => {
     try {
+        const { from, to } = req.body.stayDates;
         const errors = validationResult(req);
+
+        // Date validation
+        if (new Date(from) >= new Date(to)) {
+            errors.errors.push({ msg: 'Checkout date must be after check-in date' });
+        }
+
         if (!errors.isEmpty()) {
-            const hotels = await Hotel.find(); // Refetch hotels for dropdown
+            const hotels = await Hotel.find();
             return res.render('guest/form', {
                 pageTitle: 'Guest Registration',
                 formData: req.body,
                 errors: errors.array(),
-                hotels
+                hotels,
             });
         }
 
         const guest = new Guest({
-            hotel: req.body.hotel, // Use selected hotel from form
+            hotel: req.body.hotel,
             fullName: req.body.fullName.trim(),
             mobileNumber: req.body.mobileNumber.trim(),
             email: req.body.email.trim(),
@@ -1186,9 +1187,18 @@ body {
 }
 ```
 
+# public\uploads\1737462351066.jpg
+
+This is a binary file of the type: Image
+
+# public\uploads\1737465722391.jpg
+
+This is a binary file of the type: Image
+
 # routes\adminRoutes.js
 
 ```js
+//adminRoutes.js
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
@@ -1224,8 +1234,9 @@ router.get('/dashboard', async (req, res) => {
         res.redirect('/admin/login');
     }
 });
-
+router.get('/hotels', adminController.getHotels);
 router.post('/add-hotel', upload.single('logo'), adminController.addHotel);
+router.get('/hotels/:hotelId/guests', adminController.getGuests);
 
 module.exports = router;
 ```
@@ -1249,7 +1260,8 @@ router.get('/form', async (req, res) => {
         hotel: null, 
         pageTitle: 'Guest Registration',
         errors: [],
-        formData: {}
+        formData: {},
+        hotels: hotels
     });
 });
 // Static route to render the guest registration form
@@ -1448,40 +1460,74 @@ module.exports = generateQRCode;
 # views\admin\hotels.ejs
 
 ```ejs
+<div class="container">
+    <h1 class="mb-4">Manage Hotels</h1>
+    
+    <% if (error) { %>
+        <div class="alert alert-danger"><%= error %></div>
+    <% } %>
 
-<h1>Manage Hotels</h1>
-<form method="POST" action="/admin/add-hotel" enctype="multipart/form-data">
-    <div class="mb-3">
-        <input type="text" name="name" class="form-control" placeholder="Hotel Name" required />
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Add New Hotel</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="/admin/add-hotel" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Hotel Name</label>
+                    <input type="text" class="form-control" id="name" name="name" required>
+                </div>
+                <div class="mb-3">
+                    <label for="address" class="form-label">Address</label>
+                    <input type="text" class="form-control" id="address" name="address" required>
+                </div>
+                <div class="mb-3">
+                    <label for="logo" class="form-label">Logo</label>
+                    <input type="file" class="form-control" id="logo" name="logo" accept="image/*" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Add Hotel</button>
+            </form>
+        </div>
     </div>
-    <div class="mb-3">
-        <input type="text" name="address" class="form-control" placeholder="Address" required />
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Hotel List</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Address</th>
+                            <th>Logo</th>
+                            <th>QR Code</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% hotels.forEach(hotel => { %>
+                            <tr>
+                                <td><%= hotel.name %></td>
+                                <td><%= hotel.address %></td>
+                                <td>
+                                    <img src="/uploads/<%= hotel.logo %>" alt="Logo" style="height: 50px;">
+                                </td>
+                                <td>
+                                    <img src="<%= hotel.qrCode %>" alt="QR Code" style="height: 50px;">
+                                </td>
+                                <td>
+                                    <a href="/admin/hotels/<%= hotel._id %>/guests" class="btn btn-sm btn-info">View Guests</a>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
-    <div class="mb-3">
-        <input type="file" name="logo" class="form-control" />
-    </div>
-    <button type="submit" class="btn btn-primary">Add Hotel</button>
-</form>
-<table class="table mt-4">
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Address</th>
-            <th>Logo</th>
-            <th>QR Code</th>
-        </tr>
-    </thead>
-    <tbody>
-        <% hotels.forEach(hotel => { %>
-            <tr>
-                <td><%= hotel.name %></td>
-                <td><%= hotel.address %></td>
-                <td><img src="/uploads/<%= hotel.logo %>" alt="Logo" width="50" /></td>
-                <td><img src="<%= hotel.qrCode %>" alt="QR Code" width="50" /></td>
-            </tr>
-        <% }) %>
-    </tbody>
-</table>
+</div>
 ```
 
 # views\admin\login.ejs
@@ -1607,11 +1653,16 @@ module.exports = generateQRCode;
                                         <label for="hotel" class="form-label">Select Hotel</label>
                                         <select class="form-control" id="hotel" name="hotel" required>
                                             <option value="">Select a Hotel</option>
-                                            <% hotels.forEach(hotel=> { %>
-                                                <option value="<%= hotel._id %>">
-                                                    <%= hotel.name %>
-                                                </option>
-                                                <% }) %>
+                                            <% if (hotels && hotels.length> 0) { %>
+                                                <% hotels.forEach(hotel=> { %>
+                                                    <option value="<%= hotel._id %>">
+                                                        <%= hotel.name %>
+                                                    </option>
+                                                    <% }) %>
+                                                        <% } else { %>
+                                                            <option disabled>No hotels available</option>
+                                                            <% } %>
+
                                         </select>
                                     </div>
 
