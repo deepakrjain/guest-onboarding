@@ -1,7 +1,6 @@
 # app.js
 
 ```js
-// app.js
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -11,11 +10,12 @@ const expressLayouts = require('express-ejs-layouts');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const app = express();
+const connectDB = require('./config/db');
 
 // Middleware and Static File Serving
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cookieParser());
-// Ensure bodyParser middleware is applied
+app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
@@ -28,16 +28,13 @@ app.set('layout', 'layout');
 
 // Session Configuration
 app.use(session({
-    secret: process.env.SESSION_SECRET || '1067',
+    secret: '1067',
     resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
+    saveUninitialized: true,
+    cookie: { secure: false }
 }));
 
-// Global Middleware for User and Flash Messages
+// Global Middleware
 app.use((req, res, next) => {
     res.locals.user = req.user || null;
     res.locals.error = null;
@@ -72,21 +69,24 @@ app.use((req, res) => {
     });
 });
 
-// Database Connection and Server Start
-mongoose
-    .connect(process.env.MONGO_URI)
-    .then(() => {
+// Initialize Database and Start Server
+const startServer = async () => {
+    try {
+        await connectDB();
         const PORT = process.env.PORT || 3000;
-        app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-    })
-    .catch((err) => {
-        console.error('Database connection error:', err);
+        app.listen(PORT, () => {
+            console.log(`Server running on http://localhost:${PORT}`);
+        });
+    } catch (error) {
+        console.error('Failed to start server:', error);
         process.exit(1);
-    });
+    }
+};
+
+startServer();
 
 module.exports = app;
 ```
-
 
 file structure:-
 DigitalGuestOnboarding/
@@ -126,11 +126,6 @@ DigitalGuestOnboarding/
 1 | MONGO_URI=mongodb://localhost:27017/DigitalGuestOnboarding
 2 | JWT_SECRET=1067
 
---------------------------------------------------------------------------------
-/public/styles.css:
---------------------------------------------------------------------------------
-https://raw.githubusercontent.com/deepakrjain/guest-onboarding/298f09830fb03f5fb471d014f0588e5b834ec63a/public/styles.css
-
 
 --------------------------------------------------------------------------------
 /testBcrypt.js:
@@ -157,14 +152,15 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
     try {
-        await mongoose.connect(process.env.MONGO_URI, {
+        const conn = await mongoose.connect("mongodb://localhost:27017/guestOnboarding", {
             useNewUrlParser: true,
-            useUnifiedTopology: true,
+            useUnifiedTopology: true
         });
         console.log('MongoDB connected successfully!');
+        return conn;
     } catch (err) {
-        console.error('MongoDB connection error:', err);
-        process.exit(1); // Exit with failure
+        console.error('MongoDB connection error:', err.message);
+        process.exit(1);
     }
 };
 
@@ -210,6 +206,7 @@ exports.dashboard = async (req, res) => {
         });
     }
 };
+
 
 // Guest Admin Dashboard
 exports.guestDashboard = async (req, res) => {
@@ -407,55 +404,44 @@ exports.editGuest = async (req, res) => {
 # controllers\authController.js
 
 ```js
-const jwt = require('jsonwebtoken');
-const Admin = require('../models/admin');
-const bcrypt = require('bcryptjs');
+const User = require('../models/admin');  // we're still importing from admin.js but it points to 'users' collection
 
-// Login function that uses res.render
 exports.login = async (req, res) => {
     try {
-        if (!req.body || !req.body.username || !req.body.password) {
-            return res.render('admin/login', {
-                error: 'Username and password are required.'
-            });
-        }
-
         const { username, password } = req.body;
+        console.log('Login attempt:', { username, password });
 
-        const admin = await Admin.findOne({ username }).populate('hotel');
-        if (!admin) {
+        const user = await User.findOne({ username: username });
+        console.log('Found user:', user);
+
+        if (!user) {
+            console.log('No user found with username:', username);
             return res.render('admin/login', {
-                error: 'Invalid credentials',
-                username
+                error: 'Invalid username or password'
             });
         }
 
-        const isMatch = await bcrypt.compare(password, admin.password);
-        if (!isMatch) {
+        if (user.password !== password) {
+            console.log('Password mismatch');
             return res.render('admin/login', {
-                error: 'Invalid credentials',
-                username
+                error: 'Invalid username or password'
             });
         }
 
-        const token = jwt.sign(
-            { id: admin._id, role: admin.role, hotelId: admin.hotel?._id },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
+        // Create session
+        req.session.user = {
+            id: user._id,
+            username: user.username,
+            role: user.role
+        };
+        console.log('Session created:', req.session.user);
 
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            maxAge: 24 * 60 * 60 * 1000
-        });
-
-        // Redirect based on role
-        res.redirect(admin.role === 'mainAdmin' ? '/admin/dashboard' : '/admin/guest-dashboard');
+        console.log('Login successful, redirecting to dashboard');
+        res.redirect('/admin/dashboard');
     } catch (error) {
         console.error('Login error:', error);
         res.render('admin/login', {
-            error: 'An error occurred during login. Please try again.'
+            error: 'An error occurred during login'
         });
     }
 };
@@ -463,33 +449,6 @@ exports.login = async (req, res) => {
 exports.logout = (req, res) => {
     res.clearCookie('token');
     res.redirect('/admin/login');
-};
-
-exports.registerGuestAdmin = async (req, res) => {
-    try {
-        const { username, email, password, hotelId } = req.body;
-        
-        // Check if email already exists
-        const existingAdmin = await Admin.findOne({ email });
-        if (existingAdmin) {
-            return res.status(400).json({ message: 'Email already registered' });
-        }
-
-        // Create new guest admin
-        const admin = new Admin({
-            username,
-            email,
-            password, // Will be hashed by the model's pre-save middleware
-            role: 'guestAdmin',
-            hotel: hotelId
-        });
-
-        await admin.save();
-        res.status(201).json({ message: 'Guest admin registered successfully' });
-    } catch (error) {
-        console.error('Registration error:', error);
-        res.status(500).json({ message: 'Error registering guest admin' });
-    }
 };
 ```
 
@@ -551,8 +510,8 @@ exports.submitForm = async (req, res) => {
         const hotel = await Hotel.findById(req.params.hotelId);
         if (!hotel) {
             return res.status(404).render('index', {
-                pageTitle: 'Hotel Not Found',
-                message: 'The requested hotel could not be found.'
+                pageTitle: 'Error',
+                message: 'Hotel not found',
             });
         }
 
@@ -560,38 +519,37 @@ exports.submitForm = async (req, res) => {
         if (!errors.isEmpty()) {
             return res.render('guest/form', {
                 hotel,
-                pageTitle: `Welcome to ${hotel.name}`,
+                pageTitle: `Guest Registration - ${hotel.name}`,
                 formData: req.body,
-                errors: errors.array()
+                errors: errors.array(),
             });
         }
 
         const guest = new Guest({
             hotel: hotel._id,
-            fullName: req.body.fullName,
-            mobileNumber: req.body.mobileNumber,
-            email: req.body.email,
-            address: req.body.address,
+            fullName: req.body.fullName.trim(),
+            mobileNumber: req.body.mobileNumber.trim(),
+            email: req.body.email.trim(),
+            address: req.body.address.trim(),
             purpose: req.body.purpose,
             stayDates: {
                 from: req.body.stayDates.from,
-                to: req.body.stayDates.to
+                to: req.body.stayDates.to,
             },
-            idProofNumber: req.body.idProofNumber
+            idProofNumber: req.body.idProofNumber.trim(),
         });
 
         await guest.save();
 
         res.render('guest/thankyou', {
             pageTitle: 'Registration Successful',
-            guest,
-            hotel
+            fullName: guest.fullName,
         });
     } catch (err) {
-        console.error('Error submitting guest form:', err);
-        res.render('index', {
+        console.error('Guest form submission error:', err.message);
+        res.status(500).render('index', {
             pageTitle: 'Error',
-            message: 'An error occurred while processing your registration. Please try again.'
+            message: 'An error occurred while submitting the form. Please try again.',
         });
     }
 };
@@ -655,44 +613,24 @@ exports.addGuest = async (req, res) => {
 ```js
 const jwt = require('jsonwebtoken');
 
-// Middleware to verify JWT
 const verifyToken = (req, res, next) => {
     try {
-        const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+        const token = req.cookies.token;
+        
         if (!token) {
-            return res.status(401).render('admin/login', {
-                error: 'Access Denied. Please log in.',
-            });
+            return res.redirect('/admin/login');
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
         req.user = decoded;
         next();
     } catch (error) {
-        console.error('JWT Verification Error:', error);
-        res.status(403).render('admin/login', {
-            error: 'Invalid or expired token. Please log in again.',
-        });
+        console.error('Token verification error:', error);
+        res.redirect('/admin/login');
     }
 };
 
-// Middleware to check for MainAdmin role
-const isMainAdmin = (req, res, next) => {
-    if (req.user.role !== 'MainAdmin') {
-        return res.status(403).json({ message: 'Access Denied. Admin privileges required.' });
-    }
-    next();
-};
-
-// Middleware to check for GuestAdmin role
-const isGuestAdmin = (req, res, next) => {
-    if (req.user.role !== 'GuestAdmin') {
-        return res.status(403).json({ message: 'Access Denied. Guest Admin privileges required.' });
-    }
-    next();
-};
-
-module.exports = { verifyToken, isMainAdmin, isGuestAdmin };
+module.exports = { verifyToken };
 ```
 
 # middleware\uploadMiddleware.js
@@ -763,13 +701,16 @@ exports.guestValidationRules = [
             return true;
         }),
     
-    body('stayDates.to')
+        body('stayDates.to')
         .isISO8601().withMessage('Invalid check-out date')
         .custom((value, { req }) => {
             const fromDate = new Date(req.body.stayDates.from);
             const toDate = new Date(value);
             if (toDate <= fromDate) {
                 throw new Error('Check-out date must be after check-in date');
+            }
+            if (toDate > new Date(fromDate.getTime() + 30 * 24 * 60 * 60 * 1000)) {
+                throw new Error('Stay cannot exceed 30 days');
             }
             return true;
         }),
@@ -820,38 +761,14 @@ exports.validate = (req, res, next) => {
 
 ```js
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 
 const adminSchema = new mongoose.Schema({
-    username: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    role: { 
-        type: String, 
-        enum: ['mainAdmin', 'guestAdmin'], 
-        required: true 
-    },
-    hotel: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: 'Hotel',
-        required: function() { return this.role === 'guestAdmin'; }
-    },
-    email: { type: String, required: true, unique: true },
-    createdAt: { type: Date, default: Date.now }
-});
+    username: String,
+    password: String,
+    role: String
+}, { collection: 'users' });  // explicitly specify the collection name
 
-// Hash password before saving
-adminSchema.pre('save', async function(next) {
-    if (!this.isModified('password')) return next();
-    this.password = await bcrypt.hash(this.password, 10);
-    next();
-});
-
-// Method to compare password
-adminSchema.methods.comparePassword = async function(candidatePassword) {
-    return await bcrypt.compare(candidatePassword, this.password);
-};
-
-module.exports = mongoose.model('Admin', adminSchema);
+module.exports = mongoose.model('User', adminSchema);
 ```
 
 # models\guest.js
@@ -900,9 +817,13 @@ const guestSchema = new mongoose.Schema({
         required: true,
         match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
     },
-    idProofNumber: { 
-        type: String, 
-        required: true 
+    idProofNumber: {
+        type: String,
+        required: true,
+        unique: true,
+        trim: true,
+        minlength: 4,
+        maxlength: 20,
     },
     createdAt: { 
         type: Date, 
@@ -1272,91 +1193,28 @@ body {
 ```js
 const express = require('express');
 const router = express.Router();
-const generateQRCode = require('../utils/qrCode');
-const Hotel = require('../models/hotel');
-const adminController = require('../controllers/adminController');
 const authController = require('../controllers/authController');
-const { verifyToken, isMainAdmin, isGuestAdmin } = require('../middleware/authMiddleware');
-const upload = require('../middleware/uploadMiddleware');
-const { hotelValidationRules, validate } = require('../middleware/validationMiddleware');
+const adminController = require('../controllers/adminController');
+const { verifyToken } = require('../middleware/authMiddleware');
 
-// Auth routes
-router.post('/admin/login', authController.login);
-router.get('/login', (req, res) => res.render('admin/login'));
-
-// Login route with error handling
-router.post('/login', async (req, res) => {
-    try {
-        const { username, password } = req.body;
-
-        // Attempt login using authController.login
-        const user = await authController.login(username, password);
-
-        if (user) {
-            // If login successful, redirect to the dashboard
-            res.redirect('/admin/dashboard');
-        } else {
-            // If authentication fails, pass error message to the login page
-            res.render('admin/login', { error: 'Invalid username or password' });
-        }
-    } catch (error) {
-        // Log and pass the error to the login page
-        console.error('Login error:', error);
-        res.render('admin/login', { error: 'An error occurred during login' });
-    }
+// Public routes
+router.get('/login', (req, res) => {
+    res.render('admin/login', { error: null });
 });
-
-// Logout route
+router.post('/login', authController.login);
 router.get('/logout', authController.logout);
 
 // Protected routes
 router.use(verifyToken);
-
-// Main admin routes
-router.use('/hotels', isMainAdmin);
-router.get('/hotels', adminController.getHotels);
-router.post(
-    '/hotels',
-    upload.single('logo'), // Handles file upload for the "logo" field
-    hotelValidationRules,
-    validate,
-    async (req, res) => {
-        try {
-            const { name, address } = req.body;
-            const logo = req.file.filename; // The uploaded file's name
-            const qrCodeUrl = `${process.env.BASE_URL}/guest/form?hotelId=${name}`;
-            const qrCode = await generateQRCode(qrCodeUrl);
-
-            const hotel = new Hotel({ name, address, logo, qrCode });
-            await hotel.save();
-
-            res.redirect('/admin/dashboard');
-        } catch (error) {
-            console.error('Error adding hotel:', error);
-            res.status(500).send('Internal Server Error');
-        }
+router.get('/dashboard', (req, res) => {
+    if (!req.session.user) {
+        return res.redirect('/admin/login'); // Redirect to login if not authenticated
     }
-);
-
-router.get('/dashboard', isMainAdmin, adminController.dashboard);
-
-
-// routes/adminRoutes.js
-
-// Add these routes
-router.delete('/hotels/:id', isMainAdmin, adminController.deleteHotel);
-router.get('/search/guests', verifyToken, adminController.searchGuests);
-
-
-// Guest admin routes
-router.use('/guests', isGuestAdmin);
-router.get('/guests', adminController.getGuests);
-router.get('/guest/:id', adminController.viewGuest);
-router.post('/guest/edit/:id', adminController.editGuest);
-router.get('/guest-dashboard', isGuestAdmin, adminController.guestDashboard);
-
-// Register guest admin (main admin only)
-router.post('/register-guest-admin', isMainAdmin, authController.registerGuestAdmin);
+    res.render('admin/dashboard', {
+        user: req.session.user,
+        pageTitle: 'Admin Dashboard'
+    });
+});
 
 module.exports = router;
 ```
@@ -1416,13 +1274,13 @@ bcrypt.hash('password123', 10)
 # utils\qrCode.js
 
 ```js
-const QRCode = require('qrcode');
-
-const generateQRCode = async (url) => {
+const generateQRCode = async (hotelId) => {
     try {
+        const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+        const url = `${baseUrl}/guest/form/${hotelId}`;
         return await QRCode.toDataURL(url);
     } catch (error) {
-        console.error('QR Code Generation Error:', error);
+        console.error('QR Code generation error:', error);
         throw error;
     }
 };
@@ -1618,20 +1476,32 @@ module.exports = generateQRCode;
 # views\admin\login.ejs
 
 ```ejs
+<!DOCTYPE html>
+<html>
 
-<h1>Admin Login</h1>
-<form method="POST" action="/admin/login">
-    <div class="mb-3">
-        <input type="text" name="username" class="form-control" placeholder="Username" required />
-    </div>
-    <div class="mb-3">
-        <input type="password" name="password" class="form-control" placeholder="Password" required />
-    </div>
-    <button type="submit" class="btn btn-primary">Login</button>
-    <% if (error) { %>
-        <p style="color: red;"><%= error %></p>
-    <% } %>
-</form>
+<head>
+    <title>Admin Login</title>
+</head>
+
+<body>
+    <h1>Admin Login</h1>
+    <form method="POST" action="/admin/login">
+        <div class="mb-3">
+            <input type="text" name="username" class="form-control" placeholder="Username" required />
+        </div>
+        <div class="mb-3">
+            <input type="password" name="password" class="form-control" placeholder="Password" required />
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+        <% if (error) { %>
+            <p style="color: red;">
+                <%= error %>
+            </p>
+            <% } %>
+    </form>
+</body>
+
+</html>
 ```
 
 # views\admin\viewGuest.ejs
@@ -1814,4 +1684,3 @@ module.exports = generateQRCode;
 </body>
 </html>
 ```
-

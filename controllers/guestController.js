@@ -4,41 +4,31 @@ const { validationResult } = require('express-validator');
 
 exports.showForm = async (req, res) => {
     try {
-        const { hotelId } = req.params;
+        const hotels = await Hotel.find(); // Fetch all hotels
 
-        if (!hotelId) {
-            return res.status(400).render('guest/form', {
-                hotel: null, 
-                pageTitle: 'Guest Registration',
-                errors: [{ msg: 'Hotel not specified' }],
-                formData: {}
-            });
-        }
-
-        const hotel = await Hotel.findById(hotelId);
-
-        if (!hotel) {
+        if (!hotels.length) {
             return res.status(404).render('guest/form', {
-                hotel: null, 
+                hotel: null,
                 pageTitle: 'Guest Registration',
-                errors: [{ msg: 'Hotel not found' }],
-                formData: {}
+                errors: [{ msg: 'No hotels available for registration.' }],
+                formData: {},
+                hotels: [] // Pass empty hotels array
             });
         }
 
         res.render('guest/form', {
-            hotel,
-            pageTitle: `Guest Registration - ${hotel.name}`,
+            pageTitle: 'Guest Registration',
             errors: [],
-            formData: {}
+            formData: {},
+            hotels: hotels // Pass the hotels array to the form
         });
     } catch (error) {
-        console.error('Error showing guest form:', error);
+        console.error('Error fetching hotels for registration form:', error);
         res.status(500).render('guest/form', {
-            hotel: null, 
             pageTitle: 'Guest Registration',
-            errors: [{ msg: 'An unexpected error occurred. Please try again later.' }],
-            formData: {}
+            errors: [{ msg: 'An unexpected error occurred.' }],
+            formData: {},
+            hotels: [] // Handle error with empty hotels array
         });
     }
 };
@@ -50,26 +40,19 @@ exports.getGuests = (req, res) => {
 
 exports.submitForm = async (req, res) => {
     try {
-        const hotel = await Hotel.findById(req.params.hotelId);
-        if (!hotel) {
-            return res.status(404).render('index', {
-                pageTitle: 'Error',
-                message: 'Hotel not found',
-            });
-        }
-
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
+            const hotels = await Hotel.find(); // Refetch hotels for dropdown
             return res.render('guest/form', {
-                hotel,
-                pageTitle: `Guest Registration - ${hotel.name}`,
+                pageTitle: 'Guest Registration',
                 formData: req.body,
                 errors: errors.array(),
+                hotels
             });
         }
 
         const guest = new Guest({
-            hotel: hotel._id,
+            hotel: req.body.hotel, // Use selected hotel from form
             fullName: req.body.fullName.trim(),
             mobileNumber: req.body.mobileNumber.trim(),
             email: req.body.email.trim(),

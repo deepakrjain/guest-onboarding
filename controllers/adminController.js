@@ -35,7 +35,6 @@ exports.dashboard = async (req, res) => {
     }
 };
 
-
 // Guest Admin Dashboard
 exports.guestDashboard = async (req, res) => {
     try {
@@ -78,21 +77,31 @@ exports.guestDashboard = async (req, res) => {
 };
 
 exports.addHotel = async (req, res) => {
-    const { name, address } = req.body;
-    const logo = req.file.path; // Assuming file upload is handled
-    const newHotel = await Hotel.create({ name, address, logo });
-    
-    // Generate QR code for hotel-specific landing page
-    const qrCode = await QRCode.toDataURL(`http://localhost:3000/hotels/${newHotel.id}`);
-    newHotel.qrCode = qrCode;
-    await newHotel.save();
-    
-    res.redirect('/admin/hotels');
+    try {
+        const { name, address } = req.body;
+        const logo = req.file.filename; // Uploaded file's name
+
+        // Create hotel and generate QR code
+        const newHotel = await Hotel.create({ name, address, logo });
+        const qrCode = await QRCode.toDataURL(`${req.protocol}://${req.get('host')}/guest/${newHotel._id}`);
+        newHotel.qrCode = qrCode;
+        await newHotel.save();
+
+        res.redirect('/admin/hotels'); // Redirect to Manage Hotels page
+    } catch (error) {
+        console.error('Error adding hotel:', error.message);
+        res.status(500).send('Error adding hotel');
+    }
 };
 
 exports.getHotels = async (req, res) => {
-    const hotels = await Hotel.findAll(); // Fetch from database
-    res.render('admin/hotels', { hotels });
+    try {
+        const hotels = await Hotel.find(); // Fetch all hotels from MongoDB
+        res.render('admin/hotels', { hotels });
+    } catch (error) {
+        console.error('Error fetching hotels:', error.message);
+        res.status(500).render('admin/hotels', { hotels: [], error: 'Failed to fetch hotels' });
+    }
 };
 
 exports.deleteHotel = async (req, res) => {

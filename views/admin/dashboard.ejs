@@ -1,72 +1,86 @@
 <header>
     <h1>Admin Dashboard</h1>
+    <a href="/admin/logout" class="btn btn-danger" style="float: right;">Logout</a>
 </header>
 <main>
-    <!-- views/admin/dashboard.ejs -->
-<div class="container">
-    <div class="row">
-        <div class="col-md-4">
-            <div class="card bg-primary text-white mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Total Hotels</h5>
-                    <h2><%= hotels.length %></h2>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card bg-primary text-white mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Hotels</h5>
+                        <h2>
+                            <%= hotels.length %>
+                        </h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-success text-white mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Guests</h5>
+                        <h2>
+                            <%= guests.length %>
+                        </h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-info text-white mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Today's Check-ins</h5>
+                        <h2>
+                            <%= todayCheckIns %>
+                        </h2>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card bg-success text-white mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Total Guests</h5>
-                    <h2><%= guests.length %></h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card bg-info text-white mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Today's Check-ins</h5>
-                    <h2><%= todayCheckIns %></h2>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Recent Activities</h5>
-                    <a href="/admin/hotels" class="btn btn-primary">Manage Hotels</a>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Hotel</th>
-                                    <th>Today's Guests</th>
-                                    <th>Total Guests</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <% hotels.forEach(hotel => { %>
-                                <tr>
-                                    <td><%= hotel.name %></td>
-                                    <td><%= hotel.todayGuests || 0 %></td>
-                                    <td><%= hotel.totalGuests || 0 %></td>
-                                    <td>
-                                        <a href="/admin/hotels/<%= hotel._id %>" class="btn btn-sm btn-info">View</a>
-                                        <a href="/admin/hotels/<%= hotel._id %>/guests" class="btn btn-sm btn-primary">Guests</a>
-                                    </td>
-                                </tr>
-                                <% }); %>
-                            </tbody>
-                        </table>
+
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Recent Activities</h5>
+                        <a href="/admin/hotels" class="btn btn-primary">Manage Hotels</a>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Hotel</th>
+                                        <th>Today's Guests</th>
+                                        <th>Total Guests</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% hotels.forEach(hotel=> { %>
+                                        <tr>
+                                            <td>
+                                                <%= hotel.name %>
+                                            </td>
+                                            <td>
+                                                <%= hotel.todayGuests || 0 %>
+                                            </td>
+                                            <td>
+                                                <%= hotel.totalGuests || 0 %>
+                                            </td>
+                                            <td>
+                                                <a href="/admin/hotels/<%= hotel._id %>"
+                                                    class="btn btn-sm btn-info">View</a>
+                                                <a href="/admin/hotels/<%= hotel._id %>/guests"
+                                                    class="btn btn-sm btn-primary">Guests</a>
+                                            </td>
+                                        </tr>
+                                        <% }); %>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
 </main>

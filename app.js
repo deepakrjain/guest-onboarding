@@ -27,8 +27,8 @@ app.set('layout', 'layout');
 app.use(session({
     secret: '1067',
     resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false }
+    saveUninitialized: false,
+    cookie: { secure: false } 
 }));
 
 // Global Middleware
