@@ -25,7 +25,7 @@ app.set('layout', 'layout');
 
 // Session Configuration
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    secret: process.env.SESSION_SECRET || '1067',
     resave: false,
     saveUninitialized: false,
     cookie: {

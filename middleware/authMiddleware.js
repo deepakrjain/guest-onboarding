@@ -1,8 +1,7 @@
 const jwt = require('jsonwebtoken');
 
 // Middleware to verify JWT
-// Middleware to verify JWT
-exports.verifyToken = (req, res, next) => {
+const verifyToken = (req, res, next) => {
     try {
         const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
         if (!token) {
@@ -23,7 +22,7 @@ exports.verifyToken = (req, res, next) => {
 };
 
 // Middleware to check for MainAdmin role
-exports.isMainAdmin = (req, res, next) => {
+const isMainAdmin = (req, res, next) => {
     if (req.user.role !== 'MainAdmin') {
         return res.status(403).json({ message: 'Access Denied. Admin privileges required.' });
     }
@@ -31,9 +30,11 @@ exports.isMainAdmin = (req, res, next) => {
 };
 
 // Middleware to check for GuestAdmin role
-exports.isGuestAdmin = (req, res, next) => {
+const isGuestAdmin = (req, res, next) => {
     if (req.user.role !== 'GuestAdmin') {
         return res.status(403).json({ message: 'Access Denied. Guest Admin privileges required.' });
     }
     next();
 };
+
+module.exports = { verifyToken, isMainAdmin, isGuestAdmin };

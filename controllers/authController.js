@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const Admin = require('../models/admin');
 const bcrypt = require('bcryptjs');
 
+// Login function that uses res.render
 exports.login = async (req, res) => {
     try {
         if (!req.body || !req.body.username || !req.body.password) {
@@ -40,6 +41,7 @@ exports.login = async (req, res) => {
             maxAge: 24 * 60 * 60 * 1000
         });
 
+        // Redirect based on role
         res.redirect(admin.role === 'mainAdmin' ? '/admin/dashboard' : '/admin/guest-dashboard');
     } catch (error) {
         console.error('Login error:', error);
