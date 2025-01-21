@@ -2,7 +2,8 @@ const Hotel = require('../models/hotel');
 const Guest = require('../models/guest');
 const QRCode = require('qrcode');
 const path = require('path');
-// Main Admin Dashboard
+const fs = require('fs');
+
 // Main Admin Dashboard
 exports.dashboard = async (req, res) => {
     try {
@@ -125,13 +126,16 @@ exports.getHotels = async (req, res) => {
 
 exports.deleteHotel = async (req, res) => {
     try {
-        const hotel = await Hotel.findById(req.params.id);
-        
+        const hotelId = req.params.id;
+
+        // Find the hotel by ID
+        const hotel = await Hotel.findById(hotelId);
+
         if (!hotel) {
             return res.status(404).json({ message: 'Hotel not found' });
         }
 
-        // Delete associated files
+        // Delete associated files (e.g., logo)
         if (hotel.logo) {
             fs.unlink(`public/uploads/${hotel.logo}`, err => {
                 if (err) console.error('Error deleting logo:', err);
@@ -141,11 +145,13 @@ exports.deleteHotel = async (req, res) => {
         // Delete associated guests
         await Guest.deleteMany({ hotel: hotel._id });
 
-        await hotel.remove();
-        
-        res.json({ success: true });
+        // Delete the hotel
+        await Hotel.findByIdAndDelete(hotelId);
+
+        // Redirect back to the hotel list
+        res.redirect('/admin/hotels');
     } catch (error) {
-        console.error(error);
+        console.error('Error deleting hotel:', error);
         res.status(500).json({ message: 'Error deleting hotel' });
     }
 };

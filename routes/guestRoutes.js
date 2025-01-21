@@ -7,7 +7,7 @@ router.get('/form', async (req, res) => {
     const hotels = await Hotel.find(); // Fetch all hotels
     if (hotels.length === 1) {
         // Redirect to the only hotel's form if only one hotel exists
-        return res.redirect(`/guest/form/${hotels[0]._id}`);
+        return res.redirect(`/guest/form/${hotels[0]._id}`); // Fixed URL
     }
 
     res.render('guest/form', { 

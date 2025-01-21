@@ -57,10 +57,14 @@
                                 </td>
                                 <td>
                                     <a href="/admin/hotels/<%= hotel._id %>/guests" class="btn btn-sm btn-info">View Guests</a>
+                                    <!-- Delete Button -->
+                                    <form action="/admin/hotels/<%= hotel._id %>/delete" method="POST" style="display:inline;">
+                                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                    </form>
                                 </td>
                             </tr>
                         <% }) %>
-                    </tbody>
+                    </tbody>                    
                 </table>
             </div>
         </div>

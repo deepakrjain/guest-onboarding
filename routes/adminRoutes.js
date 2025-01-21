@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const adminController = require('../controllers/adminController');
+const guestController = require('../controllers/guestController');
 const Hotel = require('../models/hotel');
 const Guest = require('../models/guest');
 const { verifyToken } = require('../middleware/authMiddleware');
@@ -51,6 +52,11 @@ router.get('/dashboard', verifyToken, async (req, res) => {
     }
 });
 
+router.post('/hotels/:id/delete', adminController.deleteHotel);
+
+router.get('/guests', guestController.getGuests); // List all guests
+router.get('/edit-guest/:guestId', guestController.getGuestDetails); // Edit guest details
+router.post('/edit-guest/:guestId', guestController.editGuest); // Handle editing guest
 router.get('/hotels', adminController.getHotels);
 router.post('/add-hotel', upload.single('logo'), adminController.addHotel);
 router.get('/hotels/:hotelId/guests', adminController.getGuests);
