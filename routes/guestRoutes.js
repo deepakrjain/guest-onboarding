@@ -14,7 +14,8 @@ router.get('/form', async (req, res) => {
         hotel: null, 
         pageTitle: 'Guest Registration',
         errors: [],
-        formData: {}
+        formData: {},
+        hotels: hotels
     });
 });
 // Static route to render the guest registration form

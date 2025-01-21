@@ -74,11 +74,16 @@
                                         <label for="hotel" class="form-label">Select Hotel</label>
                                         <select class="form-control" id="hotel" name="hotel" required>
                                             <option value="">Select a Hotel</option>
-                                            <% hotels.forEach(hotel=> { %>
-                                                <option value="<%= hotel._id %>">
-                                                    <%= hotel.name %>
-                                                </option>
-                                                <% }) %>
+                                            <% if (hotels && hotels.length> 0) { %>
+                                                <% hotels.forEach(hotel=> { %>
+                                                    <option value="<%= hotel._id %>">
+                                                        <%= hotel.name %>
+                                                    </option>
+                                                    <% }) %>
+                                                        <% } else { %>
+                                                            <option disabled>No hotels available</option>
+                                                            <% } %>
+
                                         </select>
                                     </div>
 

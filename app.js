@@ -15,7 +15,7 @@ app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
 // View Engine Setup
 app.set('view engine', 'ejs');

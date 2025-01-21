@@ -40,19 +40,26 @@ exports.getGuests = (req, res) => {
 
 exports.submitForm = async (req, res) => {
     try {
+        const { from, to } = req.body.stayDates;
         const errors = validationResult(req);
+
+        // Date validation
+        if (new Date(from) >= new Date(to)) {
+            errors.errors.push({ msg: 'Checkout date must be after check-in date' });
+        }
+
         if (!errors.isEmpty()) {
-            const hotels = await Hotel.find(); // Refetch hotels for dropdown
+            const hotels = await Hotel.find();
             return res.render('guest/form', {
                 pageTitle: 'Guest Registration',
                 formData: req.body,
                 errors: errors.array(),
-                hotels
+                hotels,
             });
         }
 
         const guest = new Guest({
-            hotel: req.body.hotel, // Use selected hotel from form
+            hotel: req.body.hotel,
             fullName: req.body.fullName.trim(),
             mobileNumber: req.body.mobileNumber.trim(),
             email: req.body.email.trim(),

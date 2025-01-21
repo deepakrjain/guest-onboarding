@@ -30,8 +30,8 @@ app.set('layout', 'layout');
 app.use(session({
     secret: '1067',
     resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false }
+    saveUninitialized: false,
+    cookie: { secure: false } 
 }));
 
 // Global Middleware
@@ -142,7 +142,6 @@ DigitalGuestOnboarding/
 
 
 --------------------------------------------------------------------------------
-
 ```
 
 # config\db.js
@@ -152,15 +151,11 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
     try {
-        const conn = await mongoose.connect("mongodb://localhost:27017/guestOnboarding", {
-            useNewUrlParser: true,
-            useUnifiedTopology: true
-        });
+        await mongoose.connect("mongodb://localhost:27017/guestOnboarding");
         console.log('MongoDB connected successfully!');
-        return conn;
     } catch (err) {
         console.error('MongoDB connection error:', err.message);
-        process.exit(1);
+        process.exit(1); // Exit with failure
     }
 };
 
@@ -207,7 +202,6 @@ exports.dashboard = async (req, res) => {
     }
 };
 
-
 // Guest Admin Dashboard
 exports.guestDashboard = async (req, res) => {
     try {
@@ -250,21 +244,31 @@ exports.guestDashboard = async (req, res) => {
 };
 
 exports.addHotel = async (req, res) => {
-    const { name, address } = req.body;
-    const logo = req.file.path; // Assuming file upload is handled
-    const newHotel = await Hotel.create({ name, address, logo });
-    
-    // Generate QR code for hotel-specific landing page
-    const qrCode = await QRCode.toDataURL(`http://localhost:3000/hotels/${newHotel.id}`);
-    newHotel.qrCode = qrCode;
-    await newHotel.save();
-    
-    res.redirect('/admin/hotels');
+    try {
+        const { name, address } = req.body;
+        const logo = req.file.filename; // Uploaded file's name
+
+        // Create hotel and generate QR code
+        const newHotel = await Hotel.create({ name, address, logo });
+        const qrCode = await QRCode.toDataURL(`${req.protocol}://${req.get('host')}/guest/${newHotel._id}`);
+        newHotel.qrCode = qrCode;
+        await newHotel.save();
+
+        res.redirect('/admin/hotels'); // Redirect to Manage Hotels page
+    } catch (error) {
+        console.error('Error adding hotel:', error.message);
+        res.status(500).send('Error adding hotel');
+    }
 };
 
 exports.getHotels = async (req, res) => {
-    const hotels = await Hotel.findAll(); // Fetch from database
-    res.render('admin/hotels', { hotels });
+    try {
+        const hotels = await Hotel.find(); // Fetch all hotels from MongoDB
+        res.render('admin/hotels', { hotels });
+    } catch (error) {
+        console.error('Error fetching hotels:', error.message);
+        res.status(500).render('admin/hotels', { hotels: [], error: 'Failed to fetch hotels' });
+    }
 };
 
 exports.deleteHotel = async (req, res) => {
@@ -405,7 +409,7 @@ exports.editGuest = async (req, res) => {
 
 ```js
 const User = require('../models/admin');  // we're still importing from admin.js but it points to 'users' collection
-
+const jwt = require('jsonwebtoken');
 exports.login = async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -434,7 +438,16 @@ exports.login = async (req, res) => {
             username: user.username,
             role: user.role
         };
-        console.log('Session created:', req.session.user);
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { id: user._id, username: user.username, role: user.role },
+            process.env.JWT_SECRET || '1067',
+            { expiresIn: '1h' } // Token expiration time
+        );
+
+        // Set token as a cookie
+        res.cookie('token', token, { httpOnly: true });
 
         console.log('Login successful, redirecting to dashboard');
         res.redirect('/admin/dashboard');
@@ -461,41 +474,31 @@ const { validationResult } = require('express-validator');
 
 exports.showForm = async (req, res) => {
     try {
-        const { hotelId } = req.params;
+        const hotels = await Hotel.find(); // Fetch all hotels
 
-        if (!hotelId) {
-            return res.status(400).render('guest/form', {
-                hotel: null, 
-                pageTitle: 'Guest Registration',
-                errors: [{ msg: 'Hotel not specified' }],
-                formData: {}
-            });
-        }
-
-        const hotel = await Hotel.findById(hotelId);
-
-        if (!hotel) {
+        if (!hotels.length) {
             return res.status(404).render('guest/form', {
-                hotel: null, 
+                hotel: null,
                 pageTitle: 'Guest Registration',
-                errors: [{ msg: 'Hotel not found' }],
-                formData: {}
+                errors: [{ msg: 'No hotels available for registration.' }],
+                formData: {},
+                hotels: [] // Pass empty hotels array
             });
         }
 
         res.render('guest/form', {
-            hotel,
-            pageTitle: `Guest Registration - ${hotel.name}`,
+            pageTitle: 'Guest Registration',
             errors: [],
-            formData: {}
+            formData: {},
+            hotels: hotels // Pass the hotels array to the form
         });
     } catch (error) {
-        console.error('Error showing guest form:', error);
+        console.error('Error fetching hotels for registration form:', error);
         res.status(500).render('guest/form', {
-            hotel: null, 
             pageTitle: 'Guest Registration',
-            errors: [{ msg: 'An unexpected error occurred. Please try again later.' }],
-            formData: {}
+            errors: [{ msg: 'An unexpected error occurred.' }],
+            formData: {},
+            hotels: [] // Handle error with empty hotels array
         });
     }
 };
@@ -507,26 +510,19 @@ exports.getGuests = (req, res) => {
 
 exports.submitForm = async (req, res) => {
     try {
-        const hotel = await Hotel.findById(req.params.hotelId);
-        if (!hotel) {
-            return res.status(404).render('index', {
-                pageTitle: 'Error',
-                message: 'Hotel not found',
-            });
-        }
-
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
+            const hotels = await Hotel.find(); // Refetch hotels for dropdown
             return res.render('guest/form', {
-                hotel,
-                pageTitle: `Guest Registration - ${hotel.name}`,
+                pageTitle: 'Guest Registration',
                 formData: req.body,
                 errors: errors.array(),
+                hotels
             });
         }
 
         const guest = new Guest({
-            hotel: hotel._id,
+            hotel: req.body.hotel, // Use selected hotel from form
             fullName: req.body.fullName.trim(),
             mobileNumber: req.body.mobileNumber.trim(),
             email: req.body.email.trim(),
@@ -615,18 +611,20 @@ const jwt = require('jsonwebtoken');
 
 const verifyToken = (req, res, next) => {
     try {
-        const token = req.cookies.token;
-        
+        const token = req.cookies.token; // Read token from cookies
         if (!token) {
-            return res.redirect('/admin/login');
+            return res.redirect('/admin/login'); // Redirect to login if no token
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        req.user = decoded;
-        next();
+        // Decode and verify the token
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || '1067');
+        req.user = decoded; // Attach decoded token to `req.user` for downstream use
+
+        next(); // Pass control to the next middleware/handler
     } catch (error) {
-        console.error('Token verification error:', error);
-        res.redirect('/admin/login');
+        console.error('Token verification error:', error.message);
+        res.clearCookie('token'); // Clear invalid token
+        res.redirect('/admin/login'); // Redirect if token is invalid
     }
 };
 
@@ -1196,8 +1194,10 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const adminController = require('../controllers/adminController');
 const { verifyToken } = require('../middleware/authMiddleware');
+const upload = require('../middleware/uploadMiddleware');
 
 // Public routes
+
 router.get('/login', (req, res) => {
     res.render('admin/login', { error: null });
 });
@@ -1206,15 +1206,26 @@ router.get('/logout', authController.logout);
 
 // Protected routes
 router.use(verifyToken);
-router.get('/dashboard', (req, res) => {
-    if (!req.session.user) {
-        return res.redirect('/admin/login'); // Redirect to login if not authenticated
+router.get('/dashboard', async (req, res) => {
+    try {
+        const hotels = []; // Replace with actual data fetching logic
+        const guests = []; // Replace with actual data fetching logic
+        const todayCheckIns = 0; // Replace with actual calculation
+
+        res.render('admin/dashboard', {
+            user: req.user, // User from the decoded token
+            pageTitle: 'Admin Dashboard',
+            hotels,
+            guests,
+            todayCheckIns
+        });
+    } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        res.redirect('/admin/login');
     }
-    res.render('admin/dashboard', {
-        user: req.session.user,
-        pageTitle: 'Admin Dashboard'
-    });
 });
+
+router.post('/add-hotel', upload.single('logo'), adminController.addHotel);
 
 module.exports = router;
 ```
@@ -1257,20 +1268,6 @@ router.post('/:hotelId', guestController.submitForm);
 module.exports = router;
 ```
 
-# testBcrypt.js
-
-```js
-const bcrypt = require('bcrypt');
-
-bcrypt.hash('password123', 10)
-  .then(hash => {
-    console.log('Hashed Password:', hash);
-  })
-  .catch(err => {
-    console.error('Error:', err);
-  });
-```
-
 # utils\qrCode.js
 
 ```js
@@ -1293,75 +1290,89 @@ module.exports = generateQRCode;
 ```ejs
 <header>
     <h1>Admin Dashboard</h1>
+    <a href="/admin/logout" class="btn btn-danger" style="float: right;">Logout</a>
 </header>
 <main>
-    <!-- views/admin/dashboard.ejs -->
-<div class="container">
-    <div class="row">
-        <div class="col-md-4">
-            <div class="card bg-primary text-white mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Total Hotels</h5>
-                    <h2><%= hotels.length %></h2>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card bg-primary text-white mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Hotels</h5>
+                        <h2>
+                            <%= hotels.length %>
+                        </h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-success text-white mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Guests</h5>
+                        <h2>
+                            <%= guests.length %>
+                        </h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-info text-white mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Today's Check-ins</h5>
+                        <h2>
+                            <%= todayCheckIns %>
+                        </h2>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card bg-success text-white mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Total Guests</h5>
-                    <h2><%= guests.length %></h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card bg-info text-white mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Today's Check-ins</h5>
-                    <h2><%= todayCheckIns %></h2>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Recent Activities</h5>
-                    <a href="/admin/hotels" class="btn btn-primary">Manage Hotels</a>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Hotel</th>
-                                    <th>Today's Guests</th>
-                                    <th>Total Guests</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <% hotels.forEach(hotel => { %>
-                                <tr>
-                                    <td><%= hotel.name %></td>
-                                    <td><%= hotel.todayGuests || 0 %></td>
-                                    <td><%= hotel.totalGuests || 0 %></td>
-                                    <td>
-                                        <a href="/admin/hotels/<%= hotel._id %>" class="btn btn-sm btn-info">View</a>
-                                        <a href="/admin/hotels/<%= hotel._id %>/guests" class="btn btn-sm btn-primary">Guests</a>
-                                    </td>
-                                </tr>
-                                <% }); %>
-                            </tbody>
-                        </table>
+
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Recent Activities</h5>
+                        <a href="/admin/hotels" class="btn btn-primary">Manage Hotels</a>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Hotel</th>
+                                        <th>Today's Guests</th>
+                                        <th>Total Guests</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% hotels.forEach(hotel=> { %>
+                                        <tr>
+                                            <td>
+                                                <%= hotel.name %>
+                                            </td>
+                                            <td>
+                                                <%= hotel.todayGuests || 0 %>
+                                            </td>
+                                            <td>
+                                                <%= hotel.totalGuests || 0 %>
+                                            </td>
+                                            <td>
+                                                <a href="/admin/hotels/<%= hotel._id %>"
+                                                    class="btn btn-sm btn-info">View</a>
+                                                <a href="/admin/hotels/<%= hotel._id %>/guests"
+                                                    class="btn btn-sm btn-primary">Guests</a>
+                                            </td>
+                                        </tr>
+                                        <% }); %>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
 </main>
 ```
 
@@ -1522,6 +1533,7 @@ module.exports = generateQRCode;
 ```ejs
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1529,6 +1541,7 @@ module.exports = generateQRCode;
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/public/styles.css">
 </head>
+
 <body>
     <div class="container mt-4">
         <div class="row justify-content-center">
@@ -1536,80 +1549,110 @@ module.exports = generateQRCode;
                 <div class="card">
                     <div class="card-header text-center">
                         <% if (hotel) { %>
-                            <img src="/uploads/<%= hotel.logo %>" alt="<%= hotel.name %> Logo" class="img-fluid mb-2" style="max-height: 100px;">
-                            <h2><%= hotel.name %></h2>
-                            <p class="text-muted"><%= hotel.address %></p>
-                        <% } else { %>
-                            <h2>Guest Registration</h2>
-                        <% } %>
+                            <img src="/uploads/<%= hotel.logo %>" alt="<%= hotel.name %> Logo" class="img-fluid mb-2"
+                                style="max-height: 100px;">
+                            <h2>
+                                <%= hotel.name %>
+                            </h2>
+                            <p class="text-muted">
+                                <%= hotel.address %>
+                            </p>
+                            <% } else { %>
+                                <h2>Guest Registration</h2>
+                                <% } %>
                     </div>
                     <div class="card-body">
-                        <% if (typeof errors !== 'undefined' && errors.length > 0) { %>
+                        <% if (typeof errors !=='undefined' && errors.length> 0) { %>
                             <div class="alert alert-danger">
                                 <ul class="mb-0">
                                     <% errors.forEach(function(error) { %>
-                                        <li><%= error.msg %></li>
-                                    <% }); %>
+                                        <li>
+                                            <%= error.msg %>
+                                        </li>
+                                        <% }); %>
                                 </ul>
                             </div>
-                        <% } %>
+                            <% } %>
 
-                        <form method="POST" action="<%= hotel ? `/guest/${hotel._id}` : '#' %>">
-                            <div class="mb-3">
-                                <label for="fullName" class="form-label">Full Name</label>
-                                <input type="text" class="form-control" id="fullName" name="fullName" 
-                                       value="<%= typeof formData !== 'undefined' ? formData.fullName : '' %>" required>
-                            </div>
+                                <form method="POST" action="<%= hotel ? `/guest/${hotel._id}` : '#' %>">
+                                    <div class="mb-3">
+                                        <label for="fullName" class="form-label">Full Name</label>
+                                        <input type="text" class="form-control" id="fullName" name="fullName"
+                                            value="<%= typeof formData !== 'undefined' ? formData.fullName : '' %>"
+                                            required>
+                                    </div>
 
-                            <div class="mb-3">
-                                <label for="mobileNumber" class="form-label">Mobile Number</label>
-                                <input type="tel" class="form-control" id="mobileNumber" name="mobileNumber" 
-                                       pattern="[0-9]{10}" value="<%= typeof formData !== 'undefined' ? formData.mobileNumber : '' %>" required>
-                            </div>
+                                    <div class="mb-3">
+                                        <label for="mobileNumber" class="form-label">Mobile Number</label>
+                                        <input type="tel" class="form-control" id="mobileNumber" name="mobileNumber"
+                                            pattern="[0-9]{10}"
+                                            value="<%= typeof formData !== 'undefined' ? formData.mobileNumber : '' %>"
+                                            required>
+                                    </div>
 
-                            <div class="mb-3">
-                                <label for="email" class="form-label">Email</label>
-                                <input type="email" class="form-control" id="email" name="email" 
-                                       value="<%= typeof formData !== 'undefined' ? formData.email : '' %>" required>
-                            </div>
+                                    <div class="mb-3">
+                                        <label for="email" class="form-label">Email</label>
+                                        <input type="email" class="form-control" id="email" name="email"
+                                            value="<%= typeof formData !== 'undefined' ? formData.email : '' %>"
+                                            required>
+                                    </div>
 
-                            <div class="mb-3">
-                                <label for="address" class="form-label">Address</label>
-                                <textarea class="form-control" id="address" name="address" rows="3" required><%= typeof formData !== 'undefined' ? formData.address : '' %></textarea>
-                            </div>
+                                    <div class="mb-3">
+                                        <label for="address" class="form-label">Address</label>
+                                        <textarea class="form-control" id="address" name="address" rows="3"
+                                            required><%= typeof formData !== 'undefined' ? formData.address : '' %></textarea>
+                                    </div>
 
-                            <div class="mb-3">
-                                <label for="purpose" class="form-label">Purpose of Visit</label>
-                                <select class="form-control" id="purpose" name="purpose" required>
-                                    <option value="">Select Purpose</option>
-                                    <option value="Business" <%= typeof formData !== 'undefined' && formData.purpose === 'Business' ? 'selected' : '' %>>Business</option>
-                                    <option value="Personal" <%= typeof formData !== 'undefined' && formData.purpose === 'Personal' ? 'selected' : '' %>>Personal</option>
-                                    <option value="Tourist" <%= typeof formData !== 'undefined' && formData.purpose === 'Tourist' ? 'selected' : '' %>>Tourist</option>
-                                </select>
-                            </div>
+                                    <div class="mb-3">
+                                        <label for="hotel" class="form-label">Select Hotel</label>
+                                        <select class="form-control" id="hotel" name="hotel" required>
+                                            <option value="">Select a Hotel</option>
+                                            <% hotels.forEach(hotel=> { %>
+                                                <option value="<%= hotel._id %>">
+                                                    <%= hotel.name %>
+                                                </option>
+                                                <% }) %>
+                                        </select>
+                                    </div>
 
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="fromDate" class="form-label">Check-in Date</label>
-                                    <input type="date" class="form-control" id="fromDate" name="stayDates[from]" 
-                                           min="<%= new Date().toISOString().split('T')[0] %>" 
-                                           value="<%= typeof formData !== 'undefined' ? formData.stayDates?.from : '' %>" required>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="toDate" class="form-label">Check-out Date</label>
-                                    <input type="date" class="form-control" id="toDate" name="stayDates[to]" 
-                                           value="<%= typeof formData !== 'undefined' ? formData.stayDates?.to : '' %>" required>
-                                </div>
-                            </div>
+                                    <div class="mb-3">
+                                        <label for="purpose" class="form-label">Purpose of Visit</label>
+                                        <select class="form-control" id="purpose" name="purpose" required>
+                                            <option value="">Select Purpose</option>
+                                            <option value="Business" <%=typeof formData !=='undefined' &&
+                                                formData.purpose==='Business' ? 'selected' : '' %>>Business</option>
+                                            <option value="Personal" <%=typeof formData !=='undefined' &&
+                                                formData.purpose==='Personal' ? 'selected' : '' %>>Personal</option>
+                                            <option value="Tourist" <%=typeof formData !=='undefined' &&
+                                                formData.purpose==='Tourist' ? 'selected' : '' %>>Tourist</option>
+                                        </select>
+                                    </div>
 
-                            <div class="mb-3">
-                                <label for="idProofNumber" class="form-label">ID Proof Number</label>
-                                <input type="text" class="form-control" id="idProofNumber" name="idProofNumber" 
-                                       value="<%= typeof formData !== 'undefined' ? formData.idProofNumber : '' %>" required>
-                            </div>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="fromDate" class="form-label">Check-in Date</label>
+                                            <input type="date" class="form-control" id="fromDate" name="stayDates[from]"
+                                                min="<%= new Date().toISOString().split('T')[0] %>"
+                                                value="<%= typeof formData !== 'undefined' ? formData.stayDates?.from : '' %>"
+                                                required>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="toDate" class="form-label">Check-out Date</label>
+                                            <input type="date" class="form-control" id="toDate" name="stayDates[to]"
+                                                value="<%= typeof formData !== 'undefined' ? formData.stayDates?.to : '' %>"
+                                                required>
+                                        </div>
+                                    </div>
 
-                            <button type="submit" class="btn btn-primary w-100">Submit Registration</button>
-                        </form>
+                                    <div class="mb-3">
+                                        <label for="idProofNumber" class="form-label">ID Proof Number</label>
+                                        <input type="text" class="form-control" id="idProofNumber" name="idProofNumber"
+                                            value="<%= typeof formData !== 'undefined' ? formData.idProofNumber : '' %>"
+                                            required>
+                                    </div>
+
+                                    <button type="submit" class="btn btn-primary w-100">Submit Registration</button>
+                                </form>
                     </div>
                 </div>
             </div>
@@ -1619,6 +1662,7 @@ module.exports = generateQRCode;
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/public/scripts/validation.js"></script>
 </body>
+
 </html>
 ```
 

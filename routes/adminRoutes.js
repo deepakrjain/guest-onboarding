@@ -1,3 +1,4 @@
+//adminRoutes.js
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
@@ -33,7 +34,8 @@ router.get('/dashboard', async (req, res) => {
         res.redirect('/admin/login');
     }
 });
-
+router.get('/hotels', adminController.getHotels);
 router.post('/add-hotel', upload.single('logo'), adminController.addHotel);
+router.get('/hotels/:hotelId/guests', adminController.getGuests);
 
 module.exports = router;

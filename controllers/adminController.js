@@ -1,7 +1,7 @@
 const Hotel = require('../models/hotel');
 const Guest = require('../models/guest');
 const QRCode = require('qrcode');
-
+const path = require('path');
 // Main Admin Dashboard
 exports.dashboard = async (req, res) => {
     try {
@@ -97,10 +97,14 @@ exports.addHotel = async (req, res) => {
 exports.getHotels = async (req, res) => {
     try {
         const hotels = await Hotel.find(); // Fetch all hotels from MongoDB
-        res.render('admin/hotels', { hotels });
+        res.render('admin/hotels', { hotels, error: null, user: req.user });
     } catch (error) {
         console.error('Error fetching hotels:', error.message);
-        res.status(500).render('admin/hotels', { hotels: [], error: 'Failed to fetch hotels' });
+        res.status(500).render('admin/hotels', { 
+            hotels: [], 
+            error: 'Failed to fetch hotels', 
+            user: req.user 
+        });
     }
 };
 
@@ -151,6 +155,7 @@ exports.searchGuests = async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Error searching guests' });
+
     }
 };
 
@@ -178,14 +183,16 @@ exports.generateQRCode = async (req, res) => {
 // Guest Management
 exports.getGuests = async (req, res) => {
     try {
-        const hotelId = req.user.role === 'mainAdmin' ? req.params.hotelId : req.user.hotelId;
-        const guests = await Guest.find({ hotel: hotelId }).sort('-createdAt');
-        const hotel = await Hotel.findById(hotelId);
-        
-        res.render('admin/guestDetails', { guests, hotel });
+        const guests = await Guest.find({ hotel: req.params.id });
+        const hotel = await Hotel.findById(req.params.id);
+        res.render('admin/guestDetails', { 
+            guests,
+            hotel,
+            user: req.user
+        });
     } catch (error) {
-        console.error(error);
-        res.status(500).send('Internal Server Error');
+        console.error('Error fetching hotel guests:', error);
+        res.redirect('/admin/hotels');
     }
 };
 
