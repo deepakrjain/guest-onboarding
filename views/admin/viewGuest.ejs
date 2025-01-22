@@ -1,17 +1,52 @@
-<h2>Guest Details</h2>
-<p><strong>Full Name:</strong>
-    <%= guest.fullName %>
-</p>
-<p><strong>Mobile:</strong>
-    <%= guest.mobileNumber %>
-</p>
-<p><strong>Purpose of Visit:</strong>
-    <%= guest.purpose %>
-</p>
-<p><strong>Stay Dates:</strong>
-    <%= guest.stayDates.from %> - <%= guest.stayDates.to %>
-</p>
-<p><strong>Email:</strong>
-    <%= guest.email %>
-</p>
-<button onclick="window.print()" class="btn btn-secondary">Print</button>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guest Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center">Guest Details</h2>
+        <table class="table table-bordered mt-4">
+            <tr>
+                <th>Full Name</th>
+                <td><%= guest.fullName %></td>
+            </tr>
+            <tr>
+                <th>Mobile Number</th>
+                <td><%= guest.mobileNumber %></td>
+            </tr>
+            <tr>
+                <th>Email</th>
+                <td><%= guest.email %></td>
+            </tr>
+            <tr>
+                <th>Address</th>
+                <td><%= guest.address %></td>
+            </tr>
+            <tr>
+                <th>Purpose</th>
+                <td><%= guest.purpose %></td>
+            </tr>
+            <tr>
+                <th>Stay Dates</th>
+                <td><%= guest.stayDates.from.toDateString() %> to <%= guest.stayDates.to.toDateString() %></td>
+            </tr>
+            <tr>
+                <th>Hotel</th>
+                <td><%= guest.hotel.name %></td>
+            </tr>
+            <tr>
+                <th>ID Proof</th>
+                <td><%= guest.idProofNumber %></td>
+            </tr>
+        </table>
+        <div class="text-center mt-4">
+            <button class="btn btn-primary" onclick="window.print()">Print</button>
+            <a href="/admin/guests" class="btn btn-secondary">Back to Guest List</a>
+        </div>
+    </div>
+</body>
+</html>

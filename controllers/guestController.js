@@ -1,6 +1,36 @@
+const bcrypt = require('bcrypt');
 const Guest = require('../models/guest');
 const Hotel = require('../models/hotel');
 const { validationResult } = require('express-validator');
+
+
+exports.showLogin = (req, res) => {
+    res.render('guest/login', { error: null });
+};
+
+exports.hotelDetails = async (req, res) => {
+    try {
+        const hotel = await Hotel.findById(req.params.id);
+        if (!hotel) {
+            return res.status(404).send('Hotel not found');
+        }
+        res.render('guest/hotelDetails', { hotel });
+    } catch (error) {
+        console.error('Error fetching hotel details:', error);
+        res.status(500).send('Internal server error');
+    }
+};
+
+
+exports.listHotels = async (req, res) => {
+    try {
+        const hotels = await Hotel.find();
+        res.render('guest/hotels', { hotels });
+    } catch (error) {
+        console.error('Error fetching hotels:', error);
+        res.status(500).send('Internal server error');
+    }
+};
 
 exports.showForm = async (req, res) => {
     try {
@@ -33,6 +63,47 @@ exports.showForm = async (req, res) => {
     }
 };
 
+// Guest login
+exports.login = async (req, res) => {
+    const { username, password } = req.body;
+    try {
+        const guest = await Guest.findOne({ username });
+        if (!guest) {
+            return res.render('guest/login', { error: 'Invalid username or password' });
+        }
+        const isMatch = await bcrypt.compare(password, guest.password);
+        if (!isMatch) {
+            return res.render('guest/login', { error: 'Invalid username or password' });
+        }
+        req.session.guest = { id: guest._id, username: guest.username };
+        res.redirect('/guest/hotels');
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).render('guest/login', { error: 'Internal server error' });
+    }
+};
+
+// Guest signup
+exports.signup = async (req, res) => {
+    const { username, password, confirmPassword } = req.body;
+    if (password !== confirmPassword) {
+        return res.render('guest/signup', { errors: [{ msg: 'Passwords do not match' }] });
+    }
+    try {
+        const existingGuest = await Guest.findOne({ username });
+        if (existingGuest) {
+            return res.render('guest/signup', { errors: [{ msg: 'Username already taken' }] });
+        }
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const newGuest = new Guest({ username, password: hashedPassword });
+        await newGuest.save();
+        res.redirect('/guest/login');
+    } catch (error) {
+        console.error('Signup error:', error);
+        res.status(500).render('guest/signup', { errors: [{ msg: 'Internal server error' }] });
+    }
+};
+
 exports.getGuests = async (req, res) => {
     try {
         const guests = await Guest.find(); // Fetch all guests
@@ -42,6 +113,25 @@ exports.getGuests = async (req, res) => {
         res.status(500).render('index', {
             pageTitle: 'Error',
             message: 'Failed to load guests list.',
+        });
+    }
+};
+
+exports.viewGuest = async (req, res) => {
+    try {
+        const guest = await Guest.findById(req.params.id).populate('hotel'); // Fetch guest and hotel details
+        if (!guest) {
+            return res.status(404).render('admin/guestDetails', {
+                pageTitle: 'Guest Not Found',
+                message: 'The guest details you are looking for do not exist.',
+            });
+        }
+        res.render('admin/viewGuest', { guest });
+    } catch (error) {
+        console.error('Error fetching guest details:', error);
+        res.status(500).render('index', {
+            pageTitle: 'Error',
+            message: 'An error occurred while fetching guest details.',
         });
     }
 };

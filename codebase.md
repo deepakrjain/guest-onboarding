@@ -90,42 +90,57 @@ module.exports = app;
 
 file structure:-
 DigitalGuestOnboarding/
-├── controllers/        # Business logic (e.g., hotel, guest)
-│   ├── adminController.js
-│   ├── guestController.js
-├── middleware/        
-│   ├── authMiddleware.js
-├── models/             # MongoDB schemas
-│   ├── hotel.js
-│   ├── guest.js
-│   ├── admin.js
-├── routes/             # Express routes
-│   ├── adminRoutes.js
-│   ├── guestRoutes.js
-├── public/             # Static files
-│   ├── uploads/
-│   ├── scripts/
-│   │   ├── validation.js
-│   ├── styles.css
-├── views/              # EJS templates
-│   ├── admin/
-│   │   ├── dashboard.ejs
-│   │   ├── guestDetails.ejs
-│   │   ├── editGuest.ejs
-│   │   ├── login.ejs
-│   │   ├── hotels.ejs
-│   ├── guest/
-│   │   ├── form.ejs
-│   │   ├── thankyou.ejs
-├── .env                # Environment variables
-├── app.js              # Main server file
-└── package.json        # Node.js dependencies
+├── .env
+├── app.js
+├── config
+    └── db.js
+├── controllers
+    ├── adminController.js
+    ├── authController.js
+    └── guestController.js
+├── fileStructure.txt
+├── middleware
+    ├── authMiddleware.js
+    ├── uploadMiddleware.js
+    └── validationMiddleware.js
+├── models
+    ├── admin.js
+    ├── guest.js
+    └── hotel.js
+├── package-lock.json
+├── package.json
+├── public
+    ├── scripts
+    │   └── validation.js
+    └── styles.css
+├── routes
+    ├── adminRoutes.js
+    └── guestRoutes.js
+├── testBcrypt.js
+├── utils
+    └── qrCode.js
+└── views
+    ├── admin
+        ├── dashboard.ejs
+        ├── editGuest.ejs
+        ├── guestDetails.ejs
+        ├── hotels.ejs
+        ├── login.ejs
+        └── viewGuest.ejs
+    ├── guest
+        ├── form.ejs
+        ├── hotels.ejs
+        ├── signup.ejs
+        └── thankyou.ejs
+    └── index.ejs
+    └── layout.ejs
 
 
 /.env:
 --------------------------------------------------------------------------------
 1 | MONGO_URI=mongodb://localhost:27017/DigitalGuestOnboarding
 2 | JWT_SECRET=1067
+
 
 --------------------------------------------------------------------------------
 
@@ -156,35 +171,51 @@ const Hotel = require('../models/hotel');
 const Guest = require('../models/guest');
 const QRCode = require('qrcode');
 const path = require('path');
+const fs = require('fs');
+
 // Main Admin Dashboard
 exports.dashboard = async (req, res) => {
     try {
         const hotels = await Hotel.find();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Get total number of guests
+        const totalGuests = await Guest.countDocuments(); // Fetch total guest count
+
+        // Get today's check-ins
+        const todayCheckIns = await Guest.countDocuments({
+            'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
+        });
+
+        // Fetch hotels with today's guests and total guests
         const hotelsWithStats = await Promise.all(
             hotels.map(async (hotel) => {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const [todayGuests, totalGuests] = await Promise.all([
+                const [hotelTodayGuests, hotelTotalGuests] = await Promise.all([
                     Guest.countDocuments({
                         hotel: hotel._id,
-                        'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) }
+                        'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
                     }),
-                    Guest.countDocuments({ hotel: hotel._id })
+                    Guest.countDocuments({ hotel: hotel._id }),
                 ]);
-                return { ...hotel.toObject(), todayGuests, totalGuests };
+
+                return { ...hotel.toObject(), todayGuests: hotelTodayGuests, totalGuests: hotelTotalGuests };
             })
         );
 
+        // Pass data to the view
         res.render('admin/dashboard', {
             pageTitle: 'Admin Dashboard',
-            hotels: hotelsWithStats,
-            guests: await Guest.find()
+            hotels: hotelsWithStats,  // Send the list of hotels with stats
+            totalGuests,             // Send totalGuests count
+            todayCheckIns,           // Send today's check-ins count
         });
+
     } catch (error) {
         console.error('Error loading dashboard:', error);
         res.status(500).render('index', {
             pageTitle: 'Error',
-            message: 'An error occurred while loading the dashboard'
+            message: 'An error occurred while loading the dashboard.',
         });
     }
 };
@@ -264,13 +295,16 @@ exports.getHotels = async (req, res) => {
 
 exports.deleteHotel = async (req, res) => {
     try {
-        const hotel = await Hotel.findById(req.params.id);
-        
+        const hotelId = req.params.id;
+
+        // Find the hotel by ID
+        const hotel = await Hotel.findById(hotelId);
+
         if (!hotel) {
             return res.status(404).json({ message: 'Hotel not found' });
         }
 
-        // Delete associated files
+        // Delete associated files (e.g., logo)
         if (hotel.logo) {
             fs.unlink(`public/uploads/${hotel.logo}`, err => {
                 if (err) console.error('Error deleting logo:', err);
@@ -280,11 +314,13 @@ exports.deleteHotel = async (req, res) => {
         // Delete associated guests
         await Guest.deleteMany({ hotel: hotel._id });
 
-        await hotel.remove();
-        
-        res.json({ success: true });
+        // Delete the hotel
+        await Hotel.findByIdAndDelete(hotelId);
+
+        // Redirect back to the hotel list
+        res.redirect('/admin/hotels');
     } catch (error) {
-        console.error(error);
+        console.error('Error deleting hotel:', error);
         res.status(500).json({ message: 'Error deleting hotel' });
     }
 };
@@ -462,9 +498,16 @@ exports.logout = (req, res) => {
 # controllers\guestController.js
 
 ```js
+const bcrypt = require('bcrypt');
 const Guest = require('../models/guest');
 const Hotel = require('../models/hotel');
 const { validationResult } = require('express-validator');
+
+
+exports.showLogin = (req, res) => {
+    res.render('guest/login', { error: null });
+};
+
 
 exports.showForm = async (req, res) => {
     try {
@@ -497,10 +540,109 @@ exports.showForm = async (req, res) => {
     }
 };
 
-exports.getGuests = (req, res) => {
-    // Logic to fetch guests from the database
-    res.render('guests', { guests: [] });
+// Guest login
+exports.login = async (req, res) => {
+    const { username, password } = req.body;
+    try {
+        const guest = await Guest.findOne({ username });
+        if (!guest) {
+            return res.render('guest/login', { error: 'Invalid username or password' });
+        }
+        const isMatch = await bcrypt.compare(password, guest.password);
+        if (!isMatch) {
+            return res.render('guest/login', { error: 'Invalid username or password' });
+        }
+        req.session.guest = { id: guest._id, username: guest.username };
+        res.redirect('/guest/hotels');
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).render('guest/login', { error: 'Internal server error' });
+    }
 };
+
+// Guest signup
+exports.signup = async (req, res) => {
+    const { username, password, confirmPassword } = req.body;
+    if (password !== confirmPassword) {
+        return res.render('guest/signup', { errors: [{ msg: 'Passwords do not match' }] });
+    }
+    try {
+        const existingGuest = await Guest.findOne({ username });
+        if (existingGuest) {
+            return res.render('guest/signup', { errors: [{ msg: 'Username already taken' }] });
+        }
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const newGuest = new Guest({ username, password: hashedPassword });
+        await newGuest.save();
+        res.redirect('/guest/login');
+    } catch (error) {
+        console.error('Signup error:', error);
+        res.status(500).render('guest/signup', { errors: [{ msg: 'Internal server error' }] });
+    }
+};
+
+exports.getGuests = async (req, res) => {
+    try {
+        const guests = await Guest.find(); // Fetch all guests
+        res.render('admin/guestDetails', { guests }); // Ensure you're passing the correct data
+    } catch (error) {
+        console.error('Error fetching guests:', error);
+        res.status(500).render('index', {
+            pageTitle: 'Error',
+            message: 'Failed to load guests list.',
+        });
+    }
+};
+
+// Fetch a guest's details for editing
+exports.getGuestDetails = async (req, res) => {
+    try {
+        const guest = await Guest.findById(req.params.guestId); // Fetch guest by ID
+        if (!guest) {
+            return res.status(404).render('admin/guestDetails', {
+                pageTitle: 'Guest Not Found',
+                message: 'The guest details you are looking for do not exist.',
+            });
+        }
+        res.render('admin/editGuest', { guest });
+    } catch (error) {
+        console.error('Error fetching guest details:', error);
+        res.status(500).render('index', {
+            pageTitle: 'Error',
+            message: 'An error occurred while fetching guest details.',
+        });
+    }
+};
+
+// Update guest's details after editing
+exports.editGuest = async (req, res) => {
+    try {
+        const { fullName, mobileNumber, purpose, stayDates, email } = req.body;
+        const updatedGuest = await Guest.findByIdAndUpdate(req.params.guestId, {
+            fullName,
+            mobileNumber,
+            purpose,
+            stayDates,
+            email,
+        }, { new: true });
+
+        if (!updatedGuest) {
+            return res.status(404).render('admin/guestDetails', {
+                pageTitle: 'Guest Not Found',
+                message: 'Unable to find guest for editing.',
+            });
+        }
+
+        res.redirect('/admin/guests');
+    } catch (error) {
+        console.error('Error editing guest:', error);
+        res.status(500).render('index', {
+            pageTitle: 'Error',
+            message: 'An error occurred while editing the guest details.',
+        });
+    }
+};
+
 
 exports.submitForm = async (req, res) => {
     try {
@@ -777,42 +919,44 @@ module.exports = mongoose.model('User', adminSchema);
 const mongoose = require('mongoose');
 
 const guestSchema = new mongoose.Schema({
-    hotel: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: 'Hotel', 
-        required: true 
+    hotel: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Hotel',
+        required: true
     },
-    fullName: { 
-        type: String, 
+    fullName: {
+        type: String,
         required: true,
         trim: true
     },
-    mobileNumber: { 
-        type: String, 
+    username: { type: String, unique: true, required: true },
+    password: { type: String, required: true },
+    mobileNumber: {
+        type: String,
         required: true,
         match: [/^[0-9]{10}$/, 'Please enter a valid 10-digit mobile number']
     },
-    address: { 
-        type: String, 
-        required: true 
+    address: {
+        type: String,
+        required: true
     },
-    purpose: { 
-        type: String, 
+    purpose: {
+        type: String,
         required: true,
         enum: ['Business', 'Personal', 'Tourist']
     },
     stayDates: {
-        from: { 
-            type: Date, 
-            required: true 
+        from: {
+            type: Date,
+            required: true
         },
-        to: { 
-            type: Date, 
-            required: true 
+        to: {
+            type: Date,
+            required: true
         }
     },
-    email: { 
-        type: String, 
+    email: {
+        type: String,
         required: true,
         match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
     },
@@ -824,16 +968,16 @@ const guestSchema = new mongoose.Schema({
         minlength: 4,
         maxlength: 20,
     },
-    createdAt: { 
-        type: Date, 
-        default: Date.now 
+    createdAt: {
+        type: Date,
+        default: Date.now
     }
 }, {
     timestamps: true
 });
 
 // Validation for stay dates
-guestSchema.pre('save', function(next) {
+guestSchema.pre('save', function (next) {
     if (this.stayDates.from > this.stayDates.to) {
         next(new Error('Check-out date must be after check-in date'));
     }
@@ -1187,10 +1331,6 @@ body {
 }
 ```
 
-# public\uploads\1737462351066.jpg
-
-This is a binary file of the type: Image
-
 # public\uploads\1737465722391.jpg
 
 This is a binary file of the type: Image
@@ -1203,6 +1343,9 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const adminController = require('../controllers/adminController');
+const guestController = require('../controllers/guestController');
+const Hotel = require('../models/hotel');
+const Guest = require('../models/guest');
 const { verifyToken } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
 
@@ -1216,17 +1359,31 @@ router.get('/logout', authController.logout);
 
 // Protected routes
 router.use(verifyToken);
-router.get('/dashboard', async (req, res) => {
+router.get('/dashboard', verifyToken, async (req, res) => {
     try {
-        const hotels = []; // Replace with actual data fetching logic
-        const guests = []; // Replace with actual data fetching logic
-        const todayCheckIns = 0; // Replace with actual calculation
+        // Fetch hotels from the database
+        const hotels = await Hotel.find();
 
+        // Get total number of guests
+        const totalGuests = await Guest.countDocuments();
+
+        // Get today's check-ins
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);  // Set time to start of the day
+        const todayCheckIns = await Guest.countDocuments({
+            'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) }
+        });
+
+        // Get guest data for the dashboard
+        const guests = await Guest.find().limit(10); // Example: fetching 10 guests (you can change the limit)
+
+        // Pass the fetched data to the view
         res.render('admin/dashboard', {
-            user: req.user, // User from the decoded token
+            user: req.user,  // User info from token
             pageTitle: 'Admin Dashboard',
             hotels,
             guests,
+            totalGuests,
             todayCheckIns
         });
     } catch (error) {
@@ -1234,6 +1391,12 @@ router.get('/dashboard', async (req, res) => {
         res.redirect('/admin/login');
     }
 });
+
+router.post('/hotels/:id/delete', adminController.deleteHotel);
+
+router.get('/guests', guestController.getGuests); // List all guests
+router.get('/edit-guest/:guestId', guestController.getGuestDetails); // Edit guest details
+router.post('/edit-guest/:guestId', guestController.editGuest); // Handle editing guest
 router.get('/hotels', adminController.getHotels);
 router.post('/add-hotel', upload.single('logo'), adminController.addHotel);
 router.get('/hotels/:hotelId/guests', adminController.getGuests);
@@ -1249,11 +1412,18 @@ const router = express.Router();
 const guestController = require('../controllers/guestController');
 const Hotel = require('../models/hotel');
 
+
+// Guest login and signup
+router.get('/login', guestController.showLogin);
+router.post('/login', guestController.handleLogin);
+router.get('/signup', guestController.showSignup);
+router.post('/signup', guestController.handleSignup);
+
 router.get('/form', async (req, res) => {
     const hotels = await Hotel.find(); // Fetch all hotels
     if (hotels.length === 1) {
         // Redirect to the only hotel's form if only one hotel exists
-        return res.redirect(`/guest/form/${hotels[0]._id}`);
+        return res.redirect(`/guest/form/${hotels[0]._id}`); // Fixed URL
     }
 
     res.render('guest/form', { 
@@ -1273,6 +1443,23 @@ router.post('/form', guestController.submitForm);
 // Route to get the list of guests (Admin)
 router.get('/guests', guestController.getGuests);
 router.post('/guests', guestController.addGuest);
+
+// List of hotels and hotel details
+router.get('/hotels', guestController.listHotels);
+router.get('/hotel/:id', guestController.hotelDetails);
+
+router.get('/login', (req, res) => res.render('guest/login', { error: null }));
+router.post('/login', guestController.login);
+
+// Guest signup routes
+router.get('/signup', (req, res) => res.render('guest/signup', { errors: [] }));
+router.post('/signup', guestController.signup);
+
+// Guest admin panel
+router.get('/admin', guestController.adminPanel);
+router.get('/admin/guest/:id', guestController.viewGuest);
+router.post('/admin/guest/:id/edit', guestController.editGuest);
+
 // Dynamic route to show the form for a specific hotel
 router.get('/:hotelId', guestController.showForm);
 router.post('/:hotelId', guestController.submitForm);
@@ -1311,9 +1498,7 @@ module.exports = generateQRCode;
                 <div class="card bg-primary text-white mb-4">
                     <div class="card-body">
                         <h5 class="card-title">Total Hotels</h5>
-                        <h2>
-                            <%= hotels.length %>
-                        </h2>
+                        <h2><%= hotels.length %></h2>
                     </div>
                 </div>
             </div>
@@ -1321,9 +1506,7 @@ module.exports = generateQRCode;
                 <div class="card bg-success text-white mb-4">
                     <div class="card-body">
                         <h5 class="card-title">Total Guests</h5>
-                        <h2>
-                            <%= guests.length %>
-                        </h2>
+                        <h2><%= totalGuests %></h2>
                     </div>
                 </div>
             </div>
@@ -1331,9 +1514,7 @@ module.exports = generateQRCode;
                 <div class="card bg-info text-white mb-4">
                     <div class="card-body">
                         <h5 class="card-title">Today's Check-ins</h5>
-                        <h2>
-                            <%= todayCheckIns %>
-                        </h2>
+                        <h2><%= todayCheckIns %></h2>
                     </div>
                 </div>
             </div>
@@ -1358,25 +1539,17 @@ module.exports = generateQRCode;
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <% hotels.forEach(hotel=> { %>
+                                    <% hotels.forEach(hotel => { %>
                                         <tr>
+                                            <td><%= hotel.name %></td>
+                                            <td><%= hotel.todayGuests || 0 %></td>
+                                            <td><%= hotel.totalGuests || 0 %></td>
                                             <td>
-                                                <%= hotel.name %>
-                                            </td>
-                                            <td>
-                                                <%= hotel.todayGuests || 0 %>
-                                            </td>
-                                            <td>
-                                                <%= hotel.totalGuests || 0 %>
-                                            </td>
-                                            <td>
-                                                <a href="/admin/hotels/<%= hotel._id %>"
-                                                    class="btn btn-sm btn-info">View</a>
-                                                <a href="/admin/hotels/<%= hotel._id %>/guests"
-                                                    class="btn btn-sm btn-primary">Guests</a>
+                                                <a href="/admin/hotels/<%= hotel._id %>" class="btn btn-sm btn-info">View</a>
+                                                <a href="/admin/hotels/<%= hotel._id %>/guests" class="btn btn-sm btn-primary">Guests</a>
                                             </td>
                                         </tr>
-                                        <% }); %>
+                                    <% }); %>
                                 </tbody>
                             </table>
                         </div>
@@ -1391,47 +1564,43 @@ module.exports = generateQRCode;
 # views\admin\editGuest.ejs
 
 ```ejs
-
-    <h1>Edit Guest Details</h1>
-    <form action="/admin/guest/edit/<%= guest._id %>" method="POST">
-        <div class="mb-3">
-            <label for="fullName" class="form-label">Full Name</label>
-            <input type="text" class="form-control" id="fullName" name="fullName" value="<%= guest.fullName %>"
-                required>
-        </div>
-        <div class="mb-3">
-            <label for="mobile" class="form-label">Mobile Number</label>
-            <input type="text" class="form-control" id="mobile" name="mobile" value="<%= guest.mobile %>" required>
-        </div>
-        <div class="mb-3">
-            <label for="purpose" class="form-label">Purpose of Visit</label>
-            <select class="form-control" id="purpose" name="purpose" required>
-                <option value="Business" <%=guest.purpose==='Business' ? 'selected' : '' %>>Business</option>
-                <option value="Personal" <%=guest.purpose==='Personal' ? 'selected' : '' %>>Personal</option>
-                <option value="Tourist" <%=guest.purpose==='Tourist' ? 'selected' : '' %>>Tourist</option>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label for="fromDate" class="form-label">Stay Dates (From)</label>
-            <input type="date" class="form-control" id="fromDate" name="fromDate" value="<%= guest.fromDate %>"
-                required>
-        </div>
-        <div class="mb-3">
-            <label for="toDate" class="form-label">Stay Dates (To)</label>
-            <input type="date" class="form-control" id="toDate" name="toDate" value="<%= guest.toDate %>" required>
-        </div>
-        <div class="mb-3">
-            <label for="email" class="form-label">Email ID</label>
-            <input type="email" class="form-control" id="email" name="email" value="<%= guest.email %>" required>
-        </div>
-        <button type="submit" class="btn btn-primary">Update Guest</button>
-    </form>
+<h1>Edit Guest Details</h1>
+<form action="/admin/edit-guest/<%= guest._id %>" method="POST">
+    <div class="mb-3">
+        <label for="fullName" class="form-label">Full Name</label>
+        <input type="text" class="form-control" id="fullName" name="fullName" value="<%= guest.fullName %>" required>
+    </div>
+    <div class="mb-3">
+        <label for="mobileNumber" class="form-label">Mobile Number</label>
+        <input type="text" class="form-control" id="mobileNumber" name="mobileNumber" value="<%= guest.mobileNumber %>" required>
+    </div>
+    <div class="mb-3">
+        <label for="purpose" class="form-label">Purpose of Visit</label>
+        <select class="form-control" id="purpose" name="purpose" required>
+            <option value="Business" <%= guest.purpose === 'Business' ? 'selected' : '' %>>Business</option>
+            <option value="Personal" <%= guest.purpose === 'Personal' ? 'selected' : '' %>>Personal</option>
+            <option value="Tourist" <%= guest.purpose === 'Tourist' ? 'selected' : '' %>>Tourist</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label for="fromDate" class="form-label">Stay Dates (From)</label>
+        <input type="date" class="form-control" id="fromDate" name="stayDates[from]" value="<%= guest.stayDates.from %>" required>
+    </div>
+    <div class="mb-3">
+        <label for="toDate" class="form-label">Stay Dates (To)</label>
+        <input type="date" class="form-control" id="toDate" name="stayDates[to]" value="<%= guest.stayDates.to %>" required>
+    </div>
+    <div class="mb-3">
+        <label for="email" class="form-label">Email ID</label>
+        <input type="email" class="form-control" id="email" name="email" value="<%= guest.email %>" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Update Guest</button>
+</form>
 ```
 
 # views\admin\guestDetails.ejs
 
 ```ejs
-
 <h1>Guest Details</h1>
 <table class="table">
     <thead>
@@ -1462,7 +1631,7 @@ module.exports = generateQRCode;
 ```ejs
 <div class="container">
     <h1 class="mb-4">Manage Hotels</h1>
-    
+
     <% if (error) { %>
         <div class="alert alert-danger"><%= error %></div>
     <% } %>
@@ -1519,10 +1688,14 @@ module.exports = generateQRCode;
                                 </td>
                                 <td>
                                     <a href="/admin/hotels/<%= hotel._id %>/guests" class="btn btn-sm btn-info">View Guests</a>
+                                    <!-- Delete Button -->
+                                    <form action="/admin/hotels/<%= hotel._id %>/delete" method="POST" style="display:inline;">
+                                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                    </form>
                                 </td>
                             </tr>
                         <% }) %>
-                    </tbody>
+                    </tbody>                    
                 </table>
             </div>
         </div>
@@ -1564,13 +1737,22 @@ module.exports = generateQRCode;
 # views\admin\viewGuest.ejs
 
 ```ejs
-
 <h2>Guest Details</h2>
-<p><strong>Full Name:</strong> <%= guest.fullName %></p>
-<p><strong>Mobile:</strong> <%= guest.mobile %></p>
-<p><strong>Purpose of Visit:</strong> <%= guest.purpose %></p>
-<p><strong>Stay Dates:</strong> <%= guest.fromDate %> - <%= guest.toDate %></p>
-<p><strong>Email:</strong> <%= guest.email %></p>
+<p><strong>Full Name:</strong>
+    <%= guest.fullName %>
+</p>
+<p><strong>Mobile:</strong>
+    <%= guest.mobileNumber %>
+</p>
+<p><strong>Purpose of Visit:</strong>
+    <%= guest.purpose %>
+</p>
+<p><strong>Stay Dates:</strong>
+    <%= guest.stayDates.from %> - <%= guest.stayDates.to %>
+</p>
+<p><strong>Email:</strong>
+    <%= guest.email %>
+</p>
 <button onclick="window.print()" class="btn btn-secondary">Print</button>
 ```
 
@@ -1717,6 +1899,88 @@ module.exports = generateQRCode;
 </html>
 ```
 
+# views\guest\login.ejs
+
+```ejs
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guest Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center">Guest Login</h2>
+        <% if (error) { %>
+            <div class="alert alert-danger"><%= error %></div>
+        <% } %>
+        <form action="/guest/login" method="POST">
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" id="username" name="username" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" id="password" name="password" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Login</button>
+        </form>
+        <div class="text-center mt-3">
+            <a href="/guest/signup">Don't have an account? Sign up here</a>
+        </div>
+    </div>
+</body>
+</html>
+```
+
+# views\guest\signup.ejs
+
+```ejs
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guest Signup</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center">Guest Signup</h2>
+        <% if (errors && errors.length > 0) { %>
+            <div class="alert alert-danger">
+                <ul>
+                    <% errors.forEach(error => { %>
+                        <li><%= error.msg %></li>
+                    <% }); %>
+                </ul>
+            </div>
+        <% } %>
+        <form action="/guest/signup" method="POST">
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" id="username" name="username" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" id="password" name="password" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="confirmPassword" class="form-label">Confirm Password</label>
+                <input type="password" id="confirmPassword" name="confirmPassword" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Sign Up</button>
+        </form>
+        <div class="text-center mt-3">
+            <a href="/guest/login">Already have an account? Login here</a>
+        </div>
+    </div>
+</body>
+</html>
+```
+
 # views\guest\thankyou.ejs
 
 ```ejs
@@ -1728,14 +1992,14 @@ module.exports = generateQRCode;
 # views\index.ejs
 
 ```ejs
-
 <div class="text-center">
     <h1>Welcome to the Digital Guest Onboarding System</h1>
     <% if (message) { %>
         <div class="alert alert-danger"><%= message %></div>
     <% } %>
-    <div>
-        <a href="/guest/form" class="btn btn-primary">Guest Registration</a>
+    <div class="mt-4">
+        <a href="/guest/login" class="btn btn-primary">Guest Login</a>
+        <a href="/guest/signup" class="btn btn-success">Guest Signup</a>
         <a href="/admin/login" class="btn btn-secondary">Admin Login</a>
     </div>
 </div>
@@ -1779,3 +2043,4 @@ module.exports = generateQRCode;
 </body>
 </html>
 ```
+

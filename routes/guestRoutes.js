@@ -3,6 +3,10 @@ const router = express.Router();
 const guestController = require('../controllers/guestController');
 const Hotel = require('../models/hotel');
 
+
+router.post('/login', guestController.login);
+router.post('/signup', guestController.signup);
+
 router.get('/form', async (req, res) => {
     const hotels = await Hotel.find(); // Fetch all hotels
     if (hotels.length === 1) {
@@ -27,6 +31,23 @@ router.post('/form', guestController.submitForm);
 // Route to get the list of guests (Admin)
 router.get('/guests', guestController.getGuests);
 router.post('/guests', guestController.addGuest);
+
+// List of hotels and hotel details
+router.get('/hotels', guestController.listHotels);
+router.get('/hotel/:id', guestController.hotelDetails);
+
+router.get('/login', (req, res) => res.render('guest/login', { error: null }));
+router.post('/login', guestController.login);
+
+// Guest signup routes
+router.get('/signup', (req, res) => res.render('guest/signup', { errors: [] }));
+router.post('/signup', guestController.signup);
+
+// Guest admin panel
+// router.get('/admin', guestController.adminPanel);
+router.get('/admin/guest/:id', guestController.viewGuest);
+router.post('/admin/guest/:id/edit', guestController.editGuest);
+
 // Dynamic route to show the form for a specific hotel
 router.get('/:hotelId', guestController.showForm);
 router.post('/:hotelId', guestController.submitForm);

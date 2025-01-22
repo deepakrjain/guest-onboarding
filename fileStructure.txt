@@ -37,6 +37,8 @@
         └── viewGuest.ejs
     ├── guest
         ├── form.ejs
+        ├── hotels.ejs
+        ├── signup.ejs
         └── thankyou.ejs
     └── index.ejs
     └── layout.ejs
