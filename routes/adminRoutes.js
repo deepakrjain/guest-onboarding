@@ -10,10 +10,8 @@ const { verifyToken } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
 
 // Public routes
-
 router.get('/login', (req, res) => {
     if (req.user) {
-        // Redirect to dashboard if the admin is already logged in
         return res.redirect('/admin/dashboard');
     }
     res.render('admin/login', { error: null });
@@ -60,10 +58,8 @@ router.get('/dashboard', verifyToken, async (req, res) => {
 router.post('/hotels/:id/delete', adminController.deleteHotel);
 
 router.get('/guests', guestController.getGuests); // List all guests
-router.get('/edit-guest/:guestId', guestController.getGuestDetails); // Edit guest details
-router.post('/edit-guest/:guestId', guestController.editGuest); // Handle editing guest
 router.get('/hotels', adminController.getHotels);
 router.post('/add-hotel', upload, adminController.addHotel);
-router.get('/hotels/:hotelId/guests', adminController.getGuests);
+router.get('/guests', adminController.getGuests);
 
 module.exports = router;

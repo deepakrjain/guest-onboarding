@@ -128,6 +128,8 @@ DigitalGuestOnboarding/
         ├── login.ejs
         └── viewGuest.ejs
     ├── guest
+        ├── adminPanel.ejs
+        ├── hotelDetails.ejs
         ├── form.ejs
         ├── hotels.ejs
         ├── signup.ejs
@@ -142,9 +144,6 @@ DigitalGuestOnboarding/
 2 | JWT_SECRET=1067
 
 
---------------------------------------------------------------------------------
-
-```
 
 # config\db.js
 
@@ -263,19 +262,34 @@ exports.guestDashboard = async (req, res) => {
 
 exports.addHotel = async (req, res) => {
     try {
-        const { name, address } = req.body;
-        const logo = req.file.filename; // Uploaded file's name
+        const { name, address, description } = req.body;
 
-        // Create hotel and generate QR code
-        const newHotel = await Hotel.create({ name, address, logo });
-        const qrCode = await QRCode.toDataURL(`${req.protocol}://${req.get('host')}/guest/${newHotel._id}`);
-        newHotel.qrCode = qrCode;
+        // Handle file uploads
+        const logo = req.files['logo'] ? req.files['logo'][0].filename : null;
+        const photos = req.files['photos'] ? req.files['photos'].map(file => file.filename) : [];
+
+        if (!logo || photos.length < 3) {
+            return res.render('admin/hotels', { 
+                error: 'Logo and at least 3 photos are required.', 
+                hotels: await Hotel.find() 
+            });
+        }
+
+        // Generate QR code for hotel
+        const qrCodeUrl = `${process.env.BASE_URL}/guest/hotel/${name}`;
+        const qrCode = await QRCode.toDataURL(qrCodeUrl);
+
+        // Save hotel to the database
+        const newHotel = new Hotel({ name, address, description, logo, photos, qrCode });
         await newHotel.save();
 
-        res.redirect('/admin/hotels'); // Redirect to Manage Hotels page
+        res.redirect('/admin/hotels');
     } catch (error) {
-        console.error('Error adding hotel:', error.message);
-        res.status(500).send('Error adding hotel');
+        console.error('Error adding hotel:', error);
+        res.status(500).render('admin/hotels', { 
+            error: 'Failed to add hotel.', 
+            hotels: await Hotel.find() 
+        });
     }
 };
 
@@ -508,34 +522,91 @@ exports.showLogin = (req, res) => {
     res.render('guest/login', { error: null });
 };
 
+exports.hotelDetails = async (req, res) => {
+    try {
+        const hotel = await Hotel.findById(req.params.id);
+        if (!hotel) {
+            return res.status(404).render('guest/form', {
+                pageTitle: 'Hotel Not Found',
+                errors: [{ msg: 'The requested hotel does not exist.' }],
+                hotels: [],
+            });
+        }
+
+        res.render('guest/hotelDetails', {
+            pageTitle: hotel.name,
+            hotel,
+        });
+    } catch (error) {
+        console.error('Error fetching hotel details:', error);
+        res.status(500).render('guest/form', {
+            pageTitle: 'Error',
+            errors: [{ msg: 'An error occurred while fetching hotel details.' }],
+            hotels: [],
+        });
+    }
+};
+
+exports.listHotels = async (req, res) => {
+    try {
+        const hotels = await Hotel.find();
+        if (!hotels.length) {
+            return res.status(404).render('guest/form', {
+                pageTitle: 'No Hotels Available',
+                errors: [{ msg: 'No hotels available at the moment.' }],
+                formData: {},
+                hotels: [], // Empty array to indicate no hotels
+            });
+        }
+
+        // Pass hotels array to form.ejs
+        res.render('guest/form', {
+            pageTitle: 'Available Hotels',
+            errors: [],
+            formData: {},
+            hotels, // Pass the list of hotels
+        });
+    } catch (error) {
+        console.error('Error fetching hotels:', error);
+        res.status(500).render('guest/form', {
+            pageTitle: 'Error',
+            errors: [{ msg: 'An error occurred while fetching the hotel list.' }],
+            formData: {},
+            hotels: [], // Empty array on error
+        });
+    }
+};
 
 exports.showForm = async (req, res) => {
     try {
+        const hotelId = req.params.hotelId || req.query.hotelId; // Get hotel ID from params or query
+        const hotel = await Hotel.findById(hotelId); // Fetch specific hotel
         const hotels = await Hotel.find(); // Fetch all hotels
 
-        if (!hotels.length) {
+        if (!hotel) {
             return res.status(404).render('guest/form', {
                 hotel: null,
                 pageTitle: 'Guest Registration',
-                errors: [{ msg: 'No hotels available for registration.' }],
+                errors: [{ msg: 'Selected hotel not found.' }],
                 formData: {},
-                hotels: [] // Pass empty hotels array
+                hotels: hotels || [] // Pass the hotels array
             });
         }
 
         res.render('guest/form', {
             pageTitle: 'Guest Registration',
             errors: [],
-            formData: {},
-            hotels: hotels // Pass the hotels array to the form
+            formData: {}, // Empty form data
+            hotels: hotels, // All hotels for dropdown
+            hotel: hotel // Pass the specific hotel to prepopulate form
         });
     } catch (error) {
-        console.error('Error fetching hotels for registration form:', error);
+        console.error('Error showing guest form:', error);
         res.status(500).render('guest/form', {
-            pageTitle: 'Guest Registration',
+            pageTitle: 'Error',
             errors: [{ msg: 'An unexpected error occurred.' }],
             formData: {},
-            hotels: [] // Handle error with empty hotels array
+            hotels: [], // Handle error with empty hotels array
         });
     }
 };
@@ -563,17 +634,37 @@ exports.login = async (req, res) => {
 // Guest signup
 exports.signup = async (req, res) => {
     const { username, password, confirmPassword } = req.body;
+
     if (password !== confirmPassword) {
         return res.render('guest/signup', { errors: [{ msg: 'Passwords do not match' }] });
     }
+
     try {
         const existingGuest = await Guest.findOne({ username });
         if (existingGuest) {
             return res.render('guest/signup', { errors: [{ msg: 'Username already taken' }] });
         }
+
         const hashedPassword = await bcrypt.hash(password, 10);
-        const newGuest = new Guest({ username, password: hashedPassword });
+
+        const newGuest = new Guest({
+            username,
+            password: hashedPassword,
+            fullName: 'Guest', // Default name for signup
+            mobileNumber: '0000000000', // Default mobile number
+            address: 'N/A', // Default address
+            purpose: 'Personal', // Default purpose
+            stayDates: {
+                from: new Date(), // Default current date
+                to: new Date(), // Default current date
+            },
+            email: `${username}@example.com`, // Default email based on username
+            idProofNumber: '0000', // Default value for ID proof
+            hotel: null, // Can be updated later in the guest admin panel
+        });
+
         await newGuest.save();
+
         res.redirect('/guest/login');
     } catch (error) {
         console.error('Signup error:', error);
@@ -581,15 +672,34 @@ exports.signup = async (req, res) => {
     }
 };
 
+
 exports.getGuests = async (req, res) => {
     try {
-        const guests = await Guest.find(); // Fetch all guests
-        res.render('admin/guestDetails', { guests }); // Ensure you're passing the correct data
+        const guests = await Guest.find({ hotel: req.params.id });
+        const hotel = await Hotel.findById(req.params.id);
+
+        res.render('guest/adminPanel', { guests, hotel });
     } catch (error) {
         console.error('Error fetching guests:', error);
+        res.status(500).send('Internal Server Error');
+    }
+};
+
+exports.viewGuest = async (req, res) => {
+    try {
+        const guest = await Guest.findById(req.params.id).populate('hotel'); // Fetch guest and hotel details
+        if (!guest) {
+            return res.status(404).render('admin/guestDetails', {
+                pageTitle: 'Guest Not Found',
+                message: 'The guest details you are looking for do not exist.',
+            });
+        }
+        res.render('admin/viewGuest', { guest });
+    } catch (error) {
+        console.error('Error fetching guest details:', error);
         res.status(500).render('index', {
             pageTitle: 'Error',
-            message: 'Failed to load guests list.',
+            message: 'An error occurred while fetching guest details.',
         });
     }
 };
@@ -742,6 +852,8 @@ exports.addGuest = async (req, res) => {
         └── viewGuest.ejs
     ├── guest
         ├── form.ejs
+        ├── hotels.ejs
+        ├── signup.ejs
         └── thankyou.ejs
     └── index.ejs
     └── layout.ejs
@@ -782,11 +894,11 @@ const multer = require('multer');
 const path = require('path');
 
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
+    destination: (req, file, cb) => {
         cb(null, 'public/uploads/');
     },
-    filename: function (req, file, cb) {
-        cb(null, Date.now() + path.extname(file.originalname));
+    filename: (req, file, cb) => {
+        cb(null, `${Date.now()}-${file.originalname}`);
     }
 });
 
@@ -804,7 +916,10 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
-module.exports = upload;
+module.exports = upload.fields([
+    { name: 'logo', maxCount: 1 }, 
+    { name: 'photos', maxCount: 10 } // Max 10 photos
+]);
 ```
 
 # middleware\validationMiddleware.js
@@ -922,7 +1037,7 @@ const guestSchema = new mongoose.Schema({
     hotel: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Hotel',
-        required: true
+        required: false
     },
     fullName: {
         type: String,
@@ -993,10 +1108,12 @@ module.exports = mongoose.model('Guest', guestSchema);
 const mongoose = require('mongoose');
 
 const HotelSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  logo: { type: String, required: true },
-  address: { type: String, required: true },
-  qrCode: { type: String }, // Path to QR code image
+    name: { type: String, required: true },
+    address: { type: String, required: true },
+    description: { type: String, required: true },
+    logo: { type: String, required: true },
+    photos: { type: [String], required: true }, // Array of photo filenames
+    qrCode: { type: String } // Path to QR code image
 });
 
 module.exports = mongoose.model('Hotel', HotelSchema);
@@ -1038,6 +1155,30 @@ module.exports = mongoose.model('Hotel', HotelSchema);
 }
 
 ```
+
+# public\assets\hotel1.jpeg
+
+This is a binary file of the type: Image
+
+# public\assets\hotel2.jpeg
+
+This is a binary file of the type: Image
+
+# public\assets\hotel3.jpeg
+
+This is a binary file of the type: Image
+
+# public\assets\hotel4.jpeg
+
+This is a binary file of the type: Image
+
+# public\assets\hotel5.jpeg
+
+This is a binary file of the type: Image
+
+# public\assets\hotel6.jpeg
+
+This is a binary file of the type: Image
 
 # public\scripts\validation.js
 
@@ -1331,7 +1472,31 @@ body {
 }
 ```
 
-# public\uploads\1737465722391.jpg
+# public\uploads\1737650059028-car loading.jpg
+
+This is a binary file of the type: Image
+
+# public\uploads\1737650059030-hotel1.jpeg
+
+This is a binary file of the type: Image
+
+# public\uploads\1737650059030-hotel2.jpeg
+
+This is a binary file of the type: Image
+
+# public\uploads\1737650059031-hotel3.jpeg
+
+This is a binary file of the type: Image
+
+# public\uploads\1737650059031-hotel4.jpeg
+
+This is a binary file of the type: Image
+
+# public\uploads\1737650059035-hotel5.jpeg
+
+This is a binary file of the type: Image
+
+# public\uploads\1737650059036-hotel6.jpeg
 
 This is a binary file of the type: Image
 
@@ -1352,8 +1517,13 @@ const upload = require('../middleware/uploadMiddleware');
 // Public routes
 
 router.get('/login', (req, res) => {
+    if (req.user) {
+        // Redirect to dashboard if the admin is already logged in
+        return res.redirect('/admin/dashboard');
+    }
     res.render('admin/login', { error: null });
 });
+
 router.post('/login', authController.login);
 router.get('/logout', authController.logout);
 
@@ -1398,7 +1568,7 @@ router.get('/guests', guestController.getGuests); // List all guests
 router.get('/edit-guest/:guestId', guestController.getGuestDetails); // Edit guest details
 router.post('/edit-guest/:guestId', guestController.editGuest); // Handle editing guest
 router.get('/hotels', adminController.getHotels);
-router.post('/add-hotel', upload.single('logo'), adminController.addHotel);
+router.post('/add-hotel', upload, adminController.addHotel);
 router.get('/hotels/:hotelId/guests', adminController.getGuests);
 
 module.exports = router;
@@ -1413,11 +1583,8 @@ const guestController = require('../controllers/guestController');
 const Hotel = require('../models/hotel');
 
 
-// Guest login and signup
-router.get('/login', guestController.showLogin);
-router.post('/login', guestController.handleLogin);
-router.get('/signup', guestController.showSignup);
-router.post('/signup', guestController.handleSignup);
+router.post('/login', guestController.login);
+router.post('/signup', guestController.signup);
 
 router.get('/form', async (req, res) => {
     const hotels = await Hotel.find(); // Fetch all hotels
@@ -1456,7 +1623,7 @@ router.get('/signup', (req, res) => res.render('guest/signup', { errors: [] }));
 router.post('/signup', guestController.signup);
 
 // Guest admin panel
-router.get('/admin', guestController.adminPanel);
+// router.get('/admin', guestController.adminPanel);
 router.get('/admin/guest/:id', guestController.viewGuest);
 router.post('/admin/guest/:id/edit', guestController.editGuest);
 
@@ -1464,19 +1631,24 @@ router.post('/admin/guest/:id/edit', guestController.editGuest);
 router.get('/:hotelId', guestController.showForm);
 router.post('/:hotelId', guestController.submitForm);
 
+router.get('/', (req, res) => res.render('index', { error: null })); // Home page shows guest login
+
 module.exports = router;
 ```
 
 # utils\qrCode.js
 
 ```js
-const generateQRCode = async (hotelId) => {
+const QRCode = require('qrcode');
+
+exports.generateQRCode = async (hotelId) => {
+    const baseUrl = 'http://192.168.29.1:3000'; // Replace with your LAN IP for testing on mobile
+    const hotelUrl = `${baseUrl}/guest/hotel/${hotelId}`; // Hotel landing page
     try {
-        const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-        const url = `${baseUrl}/guest/form/${hotelId}`;
-        return await QRCode.toDataURL(url);
+        const qrCode = await QRCode.toDataURL(hotelUrl);
+        return qrCode; // Return base64 QR code string
     } catch (error) {
-        console.error('QR Code generation error:', error);
+        console.error('Error generating QR code:', error);
         throw error;
     }
 };
@@ -1633,73 +1805,89 @@ module.exports = generateQRCode;
     <h1 class="mb-4">Manage Hotels</h1>
 
     <% if (error) { %>
-        <div class="alert alert-danger"><%= error %></div>
-    <% } %>
+        <div class="alert alert-danger">
+            <%= error %>
+        </div>
+        <% } %>
 
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0">Add New Hotel</h5>
-        </div>
-        <div class="card-body">
-            <form method="POST" action="/admin/add-hotel" enctype="multipart/form-data">
-                <div class="mb-3">
-                    <label for="name" class="form-label">Hotel Name</label>
-                    <input type="text" class="form-control" id="name" name="name" required>
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Add New Hotel</h5>
                 </div>
-                <div class="mb-3">
-                    <label for="address" class="form-label">Address</label>
-                    <input type="text" class="form-control" id="address" name="address" required>
-                </div>
-                <div class="mb-3">
-                    <label for="logo" class="form-label">Logo</label>
-                    <input type="file" class="form-control" id="logo" name="logo" accept="image/*" required>
-                </div>
-                <button type="submit" class="btn btn-primary">Add Hotel</button>
-            </form>
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-header">
-            <h5 class="mb-0">Hotel List</h5>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Address</th>
-                            <th>Logo</th>
-                            <th>QR Code</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <% hotels.forEach(hotel => { %>
-                            <tr>
-                                <td><%= hotel.name %></td>
-                                <td><%= hotel.address %></td>
-                                <td>
-                                    <img src="/uploads/<%= hotel.logo %>" alt="Logo" style="height: 50px;">
-                                </td>
-                                <td>
-                                    <img src="<%= hotel.qrCode %>" alt="QR Code" style="height: 50px;">
-                                </td>
-                                <td>
-                                    <a href="/admin/hotels/<%= hotel._id %>/guests" class="btn btn-sm btn-info">View Guests</a>
-                                    <!-- Delete Button -->
-                                    <form action="/admin/hotels/<%= hotel._id %>/delete" method="POST" style="display:inline;">
-                                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        <% }) %>
-                    </tbody>                    
-                </table>
+                <div class="card-body">
+                    <form method="POST" action="/admin/add-hotel" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Hotel Name</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="address" class="form-label">Address</label>
+                            <input type="text" class="form-control" id="address" name="address" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="logo" class="form-label">Logo</label>
+                            <input type="file" class="form-control" id="logo" name="logo" accept="image/*" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="photos" class="form-label">Hotel Photos (at least 3)</label>
+                            <input type="file" class="form-control" id="photos" name="photos" accept="image/*" multiple required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Hotel</button>
+                    </form>
+                </div>                
             </div>
-        </div>
-    </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Hotel List</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Address</th>
+                                    <th>Logo</th>
+                                    <th>QR Code</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% hotels.forEach(hotel=> { %>
+                                    <tr>
+                                        <td>
+                                            <%= hotel.name %>
+                                        </td>
+                                        <td>
+                                            <%= hotel.address %>
+                                        </td>
+                                        <td>
+                                            <img src="/uploads/<%= hotel.logo %>" alt="Logo" style="height: 50px;">
+                                        </td>
+                                        <td>
+                                            <img src="<%= hotel.qrCode %>" alt="QR Code" style="height: 50px;">
+                                        </td>
+                                        <td>
+                                            <a href="/admin/hotels/<%= hotel._id %>/guests"
+                                                class="btn btn-sm btn-info">View Guests</a>
+                                            <!-- Delete Button -->
+                                            <form action="/admin/hotels/<%= hotel._id %>/delete" method="POST"
+                                                style="display:inline;">
+                                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 </div>
 ```
 
@@ -1737,23 +1925,89 @@ module.exports = generateQRCode;
 # views\admin\viewGuest.ejs
 
 ```ejs
-<h2>Guest Details</h2>
-<p><strong>Full Name:</strong>
-    <%= guest.fullName %>
-</p>
-<p><strong>Mobile:</strong>
-    <%= guest.mobileNumber %>
-</p>
-<p><strong>Purpose of Visit:</strong>
-    <%= guest.purpose %>
-</p>
-<p><strong>Stay Dates:</strong>
-    <%= guest.stayDates.from %> - <%= guest.stayDates.to %>
-</p>
-<p><strong>Email:</strong>
-    <%= guest.email %>
-</p>
-<button onclick="window.print()" class="btn btn-secondary">Print</button>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guest Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center">Guest Details</h2>
+        <table class="table table-bordered mt-4">
+            <tr>
+                <th>Full Name</th>
+                <td><%= guest.fullName %></td>
+            </tr>
+            <tr>
+                <th>Mobile Number</th>
+                <td><%= guest.mobileNumber %></td>
+            </tr>
+            <tr>
+                <th>Email</th>
+                <td><%= guest.email %></td>
+            </tr>
+            <tr>
+                <th>Address</th>
+                <td><%= guest.address %></td>
+            </tr>
+            <tr>
+                <th>Purpose</th>
+                <td><%= guest.purpose %></td>
+            </tr>
+            <tr>
+                <th>Stay Dates</th>
+                <td><%= guest.stayDates.from.toDateString() %> to <%= guest.stayDates.to.toDateString() %></td>
+            </tr>
+            <tr>
+                <th>Hotel</th>
+                <td><%= guest.hotel.name %></td>
+            </tr>
+            <tr>
+                <th>ID Proof</th>
+                <td><%= guest.idProofNumber %></td>
+            </tr>
+        </table>
+        <div class="text-center mt-4">
+            <button class="btn btn-primary" onclick="window.print()">Print</button>
+            <a href="/admin/guests" class="btn btn-secondary">Back to Guest List</a>
+        </div>
+    </div>
+</body>
+</html>
+```
+
+# views\guest\adminPanel.ejs
+
+```ejs
+<div class="container mt-4">
+    <h2 class="mb-4">Guests for <%= hotel.name %></h2>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Mobile</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% guests.forEach(guest => { %>
+                <tr>
+                    <td><%= guest.fullName %></td>
+                    <td><%= guest.email %></td>
+                    <td><%= guest.mobileNumber %></td>
+                    <td>
+                        <a href="/guest/admin/guest/<%= guest._id %>/view" class="btn btn-info btn-sm">View</a>
+                        <a href="/guest/admin/guest/<%= guest._id %>/edit" class="btn btn-warning btn-sm">Edit</a>
+                    </td>
+                </tr>
+            <% }) %>
+        </tbody>
+    </table>
+</div>
 ```
 
 # views\guest\form.ejs
@@ -1771,130 +2025,188 @@ module.exports = generateQRCode;
 </head>
 
 <body>
-    <div class="container mt-4">
-        <div class="row justify-content-center">
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-header text-center">
-                        <% if (hotel) { %>
-                            <img src="/uploads/<%= hotel.logo %>" alt="<%= hotel.name %> Logo" class="img-fluid mb-2"
-                                style="max-height: 100px;">
-                            <h2>
-                                <%= hotel.name %>
-                            </h2>
-                            <p class="text-muted">
-                                <%= hotel.address %>
-                            </p>
+    <% if (hotels && hotels.length) { %>
+        <div class="container mt-4">
+            <h2 class="text-center mb-4">Available Hotels</h2>
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Address</th>
+                        <th>QR Code</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% hotels.forEach(hotel => { %>
+                        <tr>
+                            <td><%= hotel.name %></td>
+                            <td><%= hotel.address %></td>
+                            <td>
+                                <% if (hotel.qrCode) { %>
+                                    <img src="<%= hotel.qrCode %>" alt="QR Code" style="width: 100px;">
+                                <% } else { %>
+                                    No QR Code
+                                <% } %>
+                            </td>
+                            <td>
+                                <a href="/guest/hotel/<%= hotel._id %>" class="btn btn-primary">View Details</a>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div class="container mt-4">
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header text-center">
+                            <% if (hotel) { %>
+                                <img src="/uploads/<%= hotel.logo %>" alt="<%= hotel.name %> Logo" class="img-fluid mb-2" style="max-height: 100px;">
+                                <h2><%= hotel.name %></h2>
+                                <p class="text-muted"><%= hotel.address %></p>
                             <% } else { %>
                                 <h2>Guest Registration</h2>
-                                <% } %>
-                    </div>
-                    <div class="card-body">
-                        <% if (typeof errors !=='undefined' && errors.length> 0) { %>
-                            <div class="alert alert-danger">
-                                <ul class="mb-0">
-                                    <% errors.forEach(function(error) { %>
-                                        <li>
-                                            <%= error.msg %>
-                                        </li>
-                                        <% }); %>
-                                </ul>
-                            </div>
                             <% } %>
-
-                                <form method="POST" action="<%= hotel ? `/guest/${hotel._id}` : '#' %>">
-                                    <div class="mb-3">
-                                        <label for="fullName" class="form-label">Full Name</label>
-                                        <input type="text" class="form-control" id="fullName" name="fullName"
-                                            value="<%= typeof formData !== 'undefined' ? formData.fullName : '' %>"
-                                            required>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label for="mobileNumber" class="form-label">Mobile Number</label>
-                                        <input type="tel" class="form-control" id="mobileNumber" name="mobileNumber"
-                                            pattern="[0-9]{10}"
-                                            value="<%= typeof formData !== 'undefined' ? formData.mobileNumber : '' %>"
-                                            required>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label for="email" class="form-label">Email</label>
-                                        <input type="email" class="form-control" id="email" name="email"
-                                            value="<%= typeof formData !== 'undefined' ? formData.email : '' %>"
-                                            required>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label for="address" class="form-label">Address</label>
-                                        <textarea class="form-control" id="address" name="address" rows="3"
-                                            required><%= typeof formData !== 'undefined' ? formData.address : '' %></textarea>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label for="hotel" class="form-label">Select Hotel</label>
+                        </div>
+                        <div class="card-body">
+                            <% if (typeof errors !== 'undefined' && errors.length > 0) { %>
+                                <div class="alert alert-danger">
+                                    <ul class="mb-0">
+                                        <% errors.forEach(function(error) { %>
+                                            <li><%= error.msg %></li>
+                                        <% }) %>
+                                    </ul>
+                                </div>
+                            <% } %>
+                            <form method="POST" action="<%= hotel ? `/guest/form/${hotel._id}` : '#' %>">
+                                <div class="mb-3">
+                                    <label for="fullName" class="form-label">Full Name</label>
+                                    <input type="text" class="form-control" id="fullName" name="fullName" value="<%= typeof formData !== 'undefined' ? formData.fullName : '' %>" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="mobileNumber" class="form-label">Mobile Number</label>
+                                    <input type="tel" class="form-control" id="mobileNumber" name="mobileNumber" pattern="[0-9]{10}" value="<%= typeof formData !== 'undefined' ? formData.mobileNumber : '' %>" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="email" name="email" value="<%= typeof formData !== 'undefined' ? formData.email : '' %>" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="address" class="form-label">Address</label>
+                                    <textarea class="form-control" id="address" name="address" rows="3" required><%= typeof formData !== 'undefined' ? formData.address : '' %></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="hotel" class="form-label">Select Hotel</label>
+                                    <% if (hotel) { %>
+                                        <input type="text" class="form-control" value="<%= hotel.name %>" disabled>
+                                        <input type="hidden" name="hotel" value="<%= hotel._id %>">
+                                    <% } else { %>
                                         <select class="form-control" id="hotel" name="hotel" required>
                                             <option value="">Select a Hotel</option>
-                                            <% if (hotels && hotels.length> 0) { %>
-                                                <% hotels.forEach(hotel=> { %>
-                                                    <option value="<%= hotel._id %>">
-                                                        <%= hotel.name %>
-                                                    </option>
-                                                    <% }) %>
-                                                        <% } else { %>
-                                                            <option disabled>No hotels available</option>
-                                                            <% } %>
-
+                                            <% if (hotels && hotels.length > 0) { %>
+                                                <% hotels.forEach(hotel => { %>
+                                                    <option value="<%= hotel._id %>"><%= hotel.name %></option>
+                                                <% }) %>
+                                            <% } else { %>
+                                                <option disabled>No hotels available</option>
+                                            <% } %>
                                         </select>
+                                    <% } %>
+                                </div>                                
+                                <div class="mb-3">
+                                    <label for="purpose" class="form-label">Purpose of Visit</label>
+                                    <select class="form-control" id="purpose" name="purpose" required>
+                                        <option value="">Select Purpose</option>
+                                        <option value="Business" <%= typeof formData !== 'undefined' && formData.purpose === 'Business' ? 'selected' : '' %>>Business</option>
+                                        <option value="Personal" <%= typeof formData !== 'undefined' && formData.purpose === 'Personal' ? 'selected' : '' %>>Personal</option>
+                                        <option value="Tourist" <%= typeof formData !== 'undefined' && formData.purpose === 'Tourist' ? 'selected' : '' %>>Tourist</option>
+                                    </select>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="fromDate" class="form-label">Check-in Date</label>
+                                        <input type="date" class="form-control" id="fromDate" name="stayDates[from]" min="<%= new Date().toISOString().split('T')[0] %>" value="<%= typeof formData !== 'undefined' ? formData.stayDates?.from : '' %>" required>
                                     </div>
-
-                                    <div class="mb-3">
-                                        <label for="purpose" class="form-label">Purpose of Visit</label>
-                                        <select class="form-control" id="purpose" name="purpose" required>
-                                            <option value="">Select Purpose</option>
-                                            <option value="Business" <%=typeof formData !=='undefined' &&
-                                                formData.purpose==='Business' ? 'selected' : '' %>>Business</option>
-                                            <option value="Personal" <%=typeof formData !=='undefined' &&
-                                                formData.purpose==='Personal' ? 'selected' : '' %>>Personal</option>
-                                            <option value="Tourist" <%=typeof formData !=='undefined' &&
-                                                formData.purpose==='Tourist' ? 'selected' : '' %>>Tourist</option>
-                                        </select>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="toDate" class="form-label">Check-out Date</label>
+                                        <input type="date" class="form-control" id="toDate" name="stayDates[to]" value="<%= typeof formData !== 'undefined' ? formData.stayDates?.to : '' %>" required>
                                     </div>
-
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="fromDate" class="form-label">Check-in Date</label>
-                                            <input type="date" class="form-control" id="fromDate" name="stayDates[from]"
-                                                min="<%= new Date().toISOString().split('T')[0] %>"
-                                                value="<%= typeof formData !== 'undefined' ? formData.stayDates?.from : '' %>"
-                                                required>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="toDate" class="form-label">Check-out Date</label>
-                                            <input type="date" class="form-control" id="toDate" name="stayDates[to]"
-                                                value="<%= typeof formData !== 'undefined' ? formData.stayDates?.to : '' %>"
-                                                required>
-                                        </div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label for="idProofNumber" class="form-label">ID Proof Number</label>
-                                        <input type="text" class="form-control" id="idProofNumber" name="idProofNumber"
-                                            value="<%= typeof formData !== 'undefined' ? formData.idProofNumber : '' %>"
-                                            required>
-                                    </div>
-
-                                    <button type="submit" class="btn btn-primary w-100">Submit Registration</button>
-                                </form>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="idProofNumber" class="form-label">ID Proof Number</label>
+                                    <input type="text" class="form-control" id="idProofNumber" name="idProofNumber" value="<%= typeof formData !== 'undefined' ? formData.idProofNumber : '' %>" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">Submit Registration</button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    <% } %>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/public/scripts/validation.js"></script>
 </body>
+
+</html>
+```
+
+# views\guest\hotelDetails.ejs
+
+```ejs
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>
+        <%= hotel.name %> - Details
+    </title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<div class="container mt-4">
+    <h1 class="text-center">
+        <%= hotel.name %>
+    </h1>
+    <p class="text-center text-muted">
+        <%= hotel.address %>
+    </p>
+    <p>
+        <%= hotel.description %>
+    </p>
+
+    <% if (hotel.photos && hotel.photos.length) { %>
+        <div id="photoCarousel" class="carousel slide" data-bs-ride="carousel">
+            <div class="carousel-inner">
+                <% hotel.photos.forEach((photo, index)=> { %>
+                    <div class="carousel-item <%= index === 0 ? 'active' : '' %>">
+                        <img src="/uploads/<%= photo %>" class="d-block w-100" alt="Hotel Photo">
+                    </div>
+                    <% }) %>
+            </div>
+            <button class="carousel-control-prev" type="button" data-bs-target="#photoCarousel" data-bs-slide="prev">
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Previous</span>
+            </button>
+            <button class="carousel-control-next" type="button" data-bs-target="#photoCarousel" data-bs-slide="next">
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Next</span>
+            </button>
+        </div>
+        <% } %>
+
+            <div class="text-center mt-4">
+                <a href="/guest/hotels" class="btn btn-secondary">Back to Hotels</a>
+                <a href="/guest/form/<%= hotel._id %>?hotelId=<%= hotel._id %>" class="btn btn-primary">Book Now</a>
+            </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 </html>
 ```

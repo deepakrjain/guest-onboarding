@@ -161,8 +161,17 @@ exports.signup = async (req, res) => {
 
 exports.getGuests = async (req, res) => {
     try {
-        const guests = await Guest.find({ hotel: req.params.id });
-        const hotel = await Hotel.findById(req.params.id);
+        const hotelId = req.params.hotelId; // Fetch hotel ID
+        const guests = await Guest.find({ hotel: hotelId });
+        const hotel = await Hotel.findById(hotelId);
+
+        if (!hotel) {
+            return res.status(404).render('guest/adminPanel', {
+                guests: [],
+                hotel: null,
+                error: 'Hotel not found'
+            });
+        }
 
         res.render('guest/adminPanel', { guests, hotel });
     } catch (error) {

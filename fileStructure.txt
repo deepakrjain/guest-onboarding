@@ -36,6 +36,8 @@
         ├── login.ejs
         └── viewGuest.ejs
     ├── guest
+        ├── adminPanel.ejs
+        ├── hotelDetails.ejs
         ├── form.ejs
         ├── hotels.ejs
         ├── signup.ejs

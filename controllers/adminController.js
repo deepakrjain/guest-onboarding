@@ -221,10 +221,11 @@ exports.getGuests = async (req, res) => {
     try {
         const guests = await Guest.find({ hotel: req.params.id });
         const hotel = await Hotel.findById(req.params.id);
+
         res.render('admin/guestDetails', { 
             guests,
             hotel,
-            user: req.user
+            user: req.user,
         });
     } catch (error) {
         console.error('Error fetching hotel guests:', error);
@@ -254,28 +255,28 @@ exports.viewGuest = async (req, res) => {
 
 exports.editGuest = async (req, res) => {
     try {
-        const { fullName, mobile, purpose, fromDate, toDate, email } = req.body;
-        const guest = await Guest.findById(req.params.id);
+        const { fullName, mobileNumber, purpose, stayDates, email } = req.body;
+        const guest = await Guest.findById(req.params.guestId);
 
         if (!guest) {
             return res.status(404).send('Guest not found');
         }
 
-        // Check if user has access to edit this guest
+        // Ensure guest admin has access to edit only their hotel guests
         if (req.user.role === 'guestAdmin' && guest.hotel.toString() !== req.user.hotelId) {
             return res.status(403).send('Access denied');
         }
 
         guest.fullName = fullName;
-        guest.mobile = mobile;
+        guest.mobileNumber = mobileNumber;
         guest.purpose = purpose;
-        guest.stayDates = { from: fromDate, to: toDate };
+        guest.stayDates = stayDates;
         guest.email = email;
 
         await guest.save();
-        res.redirect(`/admin/guests${req.user.role === 'mainAdmin' ? '/' + guest.hotel : ''}`);
+        res.redirect(`/guest/admin/guests/${req.user.hotelId}`);
     } catch (error) {
-        console.error(error);
+        console.error('Error editing guest:', error);
         res.status(500).send('Internal Server Error');
     }
 };
