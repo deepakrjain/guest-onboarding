@@ -12,53 +12,87 @@ exports.hotelDetails = async (req, res) => {
     try {
         const hotel = await Hotel.findById(req.params.id);
         if (!hotel) {
-            return res.status(404).send('Hotel not found');
+            return res.status(404).render('guest/form', {
+                pageTitle: 'Hotel Not Found',
+                errors: [{ msg: 'The requested hotel does not exist.' }],
+                hotels: [],
+            });
         }
-        res.render('guest/hotelDetails', { hotel });
+
+        res.render('guest/hotelDetails', {
+            pageTitle: hotel.name,
+            hotel,
+        });
     } catch (error) {
         console.error('Error fetching hotel details:', error);
-        res.status(500).send('Internal server error');
+        res.status(500).render('guest/form', {
+            pageTitle: 'Error',
+            errors: [{ msg: 'An error occurred while fetching hotel details.' }],
+            hotels: [],
+        });
     }
 };
-
 
 exports.listHotels = async (req, res) => {
     try {
         const hotels = await Hotel.find();
-        res.render('guest/hotels', { hotels });
+        if (!hotels.length) {
+            return res.status(404).render('guest/form', {
+                pageTitle: 'No Hotels Available',
+                errors: [{ msg: 'No hotels available at the moment.' }],
+                formData: {},
+                hotels: [], // Empty array to indicate no hotels
+            });
+        }
+
+        // Pass hotels array to form.ejs
+        res.render('guest/form', {
+            pageTitle: 'Available Hotels',
+            errors: [],
+            formData: {},
+            hotels, // Pass the list of hotels
+        });
     } catch (error) {
         console.error('Error fetching hotels:', error);
-        res.status(500).send('Internal server error');
+        res.status(500).render('guest/form', {
+            pageTitle: 'Error',
+            errors: [{ msg: 'An error occurred while fetching the hotel list.' }],
+            formData: {},
+            hotels: [], // Empty array on error
+        });
     }
 };
 
 exports.showForm = async (req, res) => {
     try {
+        const hotelId = req.params.hotelId || req.query.hotelId; // Get hotel ID from params or query
+        const hotel = await Hotel.findById(hotelId); // Fetch specific hotel
         const hotels = await Hotel.find(); // Fetch all hotels
 
-        if (!hotels.length) {
+        if (!hotel) {
             return res.status(404).render('guest/form', {
                 hotel: null,
                 pageTitle: 'Guest Registration',
-                errors: [{ msg: 'No hotels available for registration.' }],
+                errors: [{ msg: 'Selected hotel not found.' }],
                 formData: {},
-                hotels: [] // Pass empty hotels array
+                hotels: hotels || [] // Pass the hotels array
             });
         }
 
         res.render('guest/form', {
             pageTitle: 'Guest Registration',
             errors: [],
-            formData: {},
-            hotels: hotels // Pass the hotels array to the form
+            formData: {}, // Empty form data
+            hotels: hotels, // All hotels for dropdown
+            hotel: hotel // Pass the specific hotel to prepopulate form
         });
     } catch (error) {
-        console.error('Error fetching hotels for registration form:', error);
+        console.error('Error showing guest form:', error);
         res.status(500).render('guest/form', {
-            pageTitle: 'Guest Registration',
+            pageTitle: 'Error',
             errors: [{ msg: 'An unexpected error occurred.' }],
             formData: {},
-            hotels: [] // Handle error with empty hotels array
+            hotels: [], // Handle error with empty hotels array
         });
     }
 };
@@ -86,17 +120,37 @@ exports.login = async (req, res) => {
 // Guest signup
 exports.signup = async (req, res) => {
     const { username, password, confirmPassword } = req.body;
+
     if (password !== confirmPassword) {
         return res.render('guest/signup', { errors: [{ msg: 'Passwords do not match' }] });
     }
+
     try {
         const existingGuest = await Guest.findOne({ username });
         if (existingGuest) {
             return res.render('guest/signup', { errors: [{ msg: 'Username already taken' }] });
         }
+
         const hashedPassword = await bcrypt.hash(password, 10);
-        const newGuest = new Guest({ username, password: hashedPassword });
+
+        const newGuest = new Guest({
+            username,
+            password: hashedPassword,
+            fullName: 'Guest', // Default name for signup
+            mobileNumber: '0000000000', // Default mobile number
+            address: 'N/A', // Default address
+            purpose: 'Personal', // Default purpose
+            stayDates: {
+                from: new Date(), // Default current date
+                to: new Date(), // Default current date
+            },
+            email: `${username}@example.com`, // Default email based on username
+            idProofNumber: '0000', // Default value for ID proof
+            hotel: null, // Can be updated later in the guest admin panel
+        });
+
         await newGuest.save();
+
         res.redirect('/guest/login');
     } catch (error) {
         console.error('Signup error:', error);
@@ -104,16 +158,16 @@ exports.signup = async (req, res) => {
     }
 };
 
+
 exports.getGuests = async (req, res) => {
     try {
-        const guests = await Guest.find(); // Fetch all guests
-        res.render('admin/guestDetails', { guests }); // Ensure you're passing the correct data
+        const guests = await Guest.find({ hotel: req.params.id });
+        const hotel = await Hotel.findById(req.params.id);
+
+        res.render('guest/adminPanel', { guests, hotel });
     } catch (error) {
         console.error('Error fetching guests:', error);
-        res.status(500).render('index', {
-            pageTitle: 'Error',
-            message: 'Failed to load guests list.',
-        });
+        res.status(500).send('Internal Server Error');
     }
 };
 

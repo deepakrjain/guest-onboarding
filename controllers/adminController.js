@@ -94,19 +94,34 @@ exports.guestDashboard = async (req, res) => {
 
 exports.addHotel = async (req, res) => {
     try {
-        const { name, address } = req.body;
-        const logo = req.file.filename; // Uploaded file's name
+        const { name, address, description } = req.body;
 
-        // Create hotel and generate QR code
-        const newHotel = await Hotel.create({ name, address, logo });
-        const qrCode = await QRCode.toDataURL(`${req.protocol}://${req.get('host')}/guest/${newHotel._id}`);
-        newHotel.qrCode = qrCode;
+        // Handle file uploads
+        const logo = req.files['logo'] ? req.files['logo'][0].filename : null;
+        const photos = req.files['photos'] ? req.files['photos'].map(file => file.filename) : [];
+
+        if (!logo || photos.length < 3) {
+            return res.render('admin/hotels', { 
+                error: 'Logo and at least 3 photos are required.', 
+                hotels: await Hotel.find() 
+            });
+        }
+
+        // Generate QR code for hotel
+        const qrCodeUrl = `${process.env.BASE_URL}/guest/hotel/${name}`;
+        const qrCode = await QRCode.toDataURL(qrCodeUrl);
+
+        // Save hotel to the database
+        const newHotel = new Hotel({ name, address, description, logo, photos, qrCode });
         await newHotel.save();
 
-        res.redirect('/admin/hotels'); // Redirect to Manage Hotels page
+        res.redirect('/admin/hotels');
     } catch (error) {
-        console.error('Error adding hotel:', error.message);
-        res.status(500).send('Error adding hotel');
+        console.error('Error adding hotel:', error);
+        res.status(500).render('admin/hotels', { 
+            error: 'Failed to add hotel.', 
+            hotels: await Hotel.find() 
+        });
     }
 };
 

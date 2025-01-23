@@ -52,4 +52,6 @@ router.post('/admin/guest/:id/edit', guestController.editGuest);
 router.get('/:hotelId', guestController.showForm);
 router.post('/:hotelId', guestController.submitForm);
 
+router.get('/', (req, res) => res.render('index', { error: null })); // Home page shows guest login
+
 module.exports = router;

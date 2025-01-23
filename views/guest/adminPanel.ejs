@@ -1,0 +1,26 @@
+<div class="container mt-4">
+    <h2 class="mb-4">Guests for <%= hotel.name %></h2>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Mobile</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% guests.forEach(guest => { %>
+                <tr>
+                    <td><%= guest.fullName %></td>
+                    <td><%= guest.email %></td>
+                    <td><%= guest.mobileNumber %></td>
+                    <td>
+                        <a href="/guest/admin/guest/<%= guest._id %>/view" class="btn btn-info btn-sm">View</a>
+                        <a href="/guest/admin/guest/<%= guest._id %>/edit" class="btn btn-warning btn-sm">Edit</a>
+                    </td>
+                </tr>
+            <% }) %>
+        </tbody>
+    </table>
+</div>
