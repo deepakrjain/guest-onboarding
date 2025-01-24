@@ -66,7 +66,7 @@
                                     </ul>
                                 </div>
                             <% } %>
-                            <form method="POST" action="<%= hotel ? `/guest/form/${hotel._id}` : '#' %>">
+                            <form method="POST" action="/guest/form/<%= hotel._id %>">
                                 <div class="mb-3">
                                     <label for="fullName" class="form-label">Full Name</label>
                                     <input type="text" class="form-control" id="fullName" name="fullName" value="<%= typeof formData !== 'undefined' ? formData.fullName : '' %>" required>
@@ -84,23 +84,21 @@
                                     <textarea class="form-control" id="address" name="address" rows="3" required><%= typeof formData !== 'undefined' ? formData.address : '' %></textarea>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="hotel" class="form-label">Select Hotel</label>
+                                    <label for="hotel" class="form-label">Selected Hotel</label>
                                     <% if (hotel) { %>
+                                        <!-- Show the selected hotel as read-only -->
                                         <input type="text" class="form-control" value="<%= hotel.name %>" disabled>
                                         <input type="hidden" name="hotel" value="<%= hotel._id %>">
                                     <% } else { %>
+                                        <!-- Allow the user to select a hotel if no specific hotel is preselected -->
                                         <select class="form-control" id="hotel" name="hotel" required>
                                             <option value="">Select a Hotel</option>
-                                            <% if (hotels && hotels.length > 0) { %>
-                                                <% hotels.forEach(hotel => { %>
-                                                    <option value="<%= hotel._id %>"><%= hotel.name %></option>
-                                                <% }) %>
-                                            <% } else { %>
-                                                <option disabled>No hotels available</option>
-                                            <% } %>
+                                            <% hotels.forEach(h => { %>
+                                                <option value="<%= h._id %>"><%= h.name %></option>
+                                            <% }) %>
                                         </select>
                                     <% } %>
-                                </div>                                
+                                </div>                                                              
                                 <div class="mb-3">
                                     <label for="purpose" class="form-label">Purpose of Visit</label>
                                     <select class="form-control" id="purpose" name="purpose" required>

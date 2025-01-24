@@ -65,9 +65,8 @@ exports.listHotels = async (req, res) => {
 
 exports.showForm = async (req, res) => {
     try {
-        const hotelId = req.params.hotelId || req.query.hotelId; // Get hotel ID from params or query
-        const hotel = await Hotel.findById(hotelId); // Fetch specific hotel
-        const hotels = await Hotel.find(); // Fetch all hotels
+        const hotelId = req.params.hotelId; // Get the hotel ID from the URL
+        const hotel = await Hotel.findById(hotelId); // Fetch the selected hotel
 
         if (!hotel) {
             return res.status(404).render('guest/form', {
@@ -75,27 +74,31 @@ exports.showForm = async (req, res) => {
                 pageTitle: 'Guest Registration',
                 errors: [{ msg: 'Selected hotel not found.' }],
                 formData: {},
-                hotels: hotels || [] // Pass the hotels array
+                hotels: [] // Pass an empty list
             });
         }
+
+        // Fetch all hotels for dropdown in case it's needed
+        const hotels = await Hotel.find();
 
         res.render('guest/form', {
             pageTitle: 'Guest Registration',
             errors: [],
-            formData: {}, // Empty form data
-            hotels: hotels, // All hotels for dropdown
-            hotel: hotel // Pass the specific hotel to prepopulate form
+            formData: {}, // Empty form data initially
+            hotels, // List of all hotels
+            hotel // Selected hotel details
         });
     } catch (error) {
-        console.error('Error showing guest form:', error);
+        console.error('Error fetching hotel details for the form:', error);
         res.status(500).render('guest/form', {
             pageTitle: 'Error',
-            errors: [{ msg: 'An unexpected error occurred.' }],
+            errors: [{ msg: 'An error occurred while fetching the hotel details.' }],
             formData: {},
-            hotels: [], // Handle error with empty hotels array
+            hotels: [] // Empty hotels array
         });
     }
 };
+
 
 // Guest login
 exports.login = async (req, res) => {
@@ -297,6 +300,17 @@ exports.submitForm = async (req, res) => {
         });
     }
 };
+
+
+exports.showSignup = (req, res) => {
+    res.render('guest/signup', { errors: [] });
+};
+
+
+exports.showLogin = (req, res) => {
+    res.render('guest/login', { errors: [] });
+};
+
 
 exports.addGuest = async (req, res) => {
     const { name, mobile, address, visitPurpose, stayDates, email, idProof } = req.body;

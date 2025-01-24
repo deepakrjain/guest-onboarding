@@ -1,3 +1,52 @@
+file structure:-
+├── .env
+├── app.js
+├── config
+    └── db.js
+├── controllers
+    ├── adminController.js
+    ├── authController.js
+    └── guestController.js
+├── fileStructure.txt
+├── middleware
+    ├── authMiddleware.js
+    ├── uploadMiddleware.js
+    └── validationMiddleware.js
+├── models
+    ├── admin.js
+    ├── guest.js
+    └── hotel.js
+├── package-lock.json
+├── package.json
+├── public
+    ├── scripts
+    │   └── validation.js
+    └── styles.css
+├── routes
+    ├── adminRoutes.js
+    └── guestRoutes.js
+├── testBcrypt.js
+├── utils
+    └── qrCode.js
+└── views
+    ├── admin
+        ├── dashboard.ejs
+        ├── editGuest.ejs
+        ├── guestDetails.ejs
+        ├── hotels.ejs
+        ├── login.ejs
+        └── viewGuest.ejs
+    ├── guest
+        ├── adminPanel.ejs
+        ├── hotelDetails.ejs
+        ├── form.ejs
+        ├── hotels.ejs
+        ├── signup.ejs
+        └── thankyou.ejs
+    └── index.ejs
+    └── layout.ejs
+
+
 # app.js
 
 ```js
@@ -87,63 +136,6 @@ startServer();
 
 module.exports = app;
 ```
-
-file structure:-
-DigitalGuestOnboarding/
-├── .env
-├── app.js
-├── config
-    └── db.js
-├── controllers
-    ├── adminController.js
-    ├── authController.js
-    └── guestController.js
-├── fileStructure.txt
-├── middleware
-    ├── authMiddleware.js
-    ├── uploadMiddleware.js
-    └── validationMiddleware.js
-├── models
-    ├── admin.js
-    ├── guest.js
-    └── hotel.js
-├── package-lock.json
-├── package.json
-├── public
-    ├── scripts
-    │   └── validation.js
-    └── styles.css
-├── routes
-    ├── adminRoutes.js
-    └── guestRoutes.js
-├── testBcrypt.js
-├── utils
-    └── qrCode.js
-└── views
-    ├── admin
-        ├── dashboard.ejs
-        ├── editGuest.ejs
-        ├── guestDetails.ejs
-        ├── hotels.ejs
-        ├── login.ejs
-        └── viewGuest.ejs
-    ├── guest
-        ├── adminPanel.ejs
-        ├── hotelDetails.ejs
-        ├── form.ejs
-        ├── hotels.ejs
-        ├── signup.ejs
-        └── thankyou.ejs
-    └── index.ejs
-    └── layout.ejs
-
-
-/.env:
---------------------------------------------------------------------------------
-1 | MONGO_URI=mongodb://localhost:27017/DigitalGuestOnboarding
-2 | JWT_SECRET=1067
-
-
 
 # config\db.js
 
@@ -389,10 +381,11 @@ exports.getGuests = async (req, res) => {
     try {
         const guests = await Guest.find({ hotel: req.params.id });
         const hotel = await Hotel.findById(req.params.id);
+
         res.render('admin/guestDetails', { 
             guests,
             hotel,
-            user: req.user
+            user: req.user,
         });
     } catch (error) {
         console.error('Error fetching hotel guests:', error);
@@ -422,28 +415,28 @@ exports.viewGuest = async (req, res) => {
 
 exports.editGuest = async (req, res) => {
     try {
-        const { fullName, mobile, purpose, fromDate, toDate, email } = req.body;
-        const guest = await Guest.findById(req.params.id);
+        const { fullName, mobileNumber, purpose, stayDates, email } = req.body;
+        const guest = await Guest.findById(req.params.guestId);
 
         if (!guest) {
             return res.status(404).send('Guest not found');
         }
 
-        // Check if user has access to edit this guest
+        // Ensure guest admin has access to edit only their hotel guests
         if (req.user.role === 'guestAdmin' && guest.hotel.toString() !== req.user.hotelId) {
             return res.status(403).send('Access denied');
         }
 
         guest.fullName = fullName;
-        guest.mobile = mobile;
+        guest.mobileNumber = mobileNumber;
         guest.purpose = purpose;
-        guest.stayDates = { from: fromDate, to: toDate };
+        guest.stayDates = stayDates;
         guest.email = email;
 
         await guest.save();
-        res.redirect(`/admin/guests${req.user.role === 'mainAdmin' ? '/' + guest.hotel : ''}`);
+        res.redirect(`/guest/admin/guests/${req.user.hotelId}`);
     } catch (error) {
-        console.error(error);
+        console.error('Error editing guest:', error);
         res.status(500).send('Internal Server Error');
     }
 };
@@ -675,8 +668,17 @@ exports.signup = async (req, res) => {
 
 exports.getGuests = async (req, res) => {
     try {
-        const guests = await Guest.find({ hotel: req.params.id });
-        const hotel = await Hotel.findById(req.params.id);
+        const hotelId = req.params.hotelId; // Fetch hotel ID
+        const guests = await Guest.find({ hotel: hotelId });
+        const hotel = await Hotel.findById(hotelId);
+
+        if (!hotel) {
+            return res.status(404).render('guest/adminPanel', {
+                guests: [],
+                hotel: null,
+                error: 'Hotel not found'
+            });
+        }
 
         res.render('guest/adminPanel', { guests, hotel });
     } catch (error) {
@@ -803,6 +805,17 @@ exports.submitForm = async (req, res) => {
     }
 };
 
+
+exports.showSignup = (req, res) => {
+    res.render('guest/signup', { errors: [] });
+};
+
+
+exports.showLogin = (req, res) => {
+    res.render('guest/login', { errors: [] });
+};
+
+
 exports.addGuest = async (req, res) => {
     const { name, mobile, address, visitPurpose, stayDates, email, idProof } = req.body;
     await Guest.create({ name, mobile, address, visitPurpose, stayDates, email, idProof });
@@ -851,6 +864,8 @@ exports.addGuest = async (req, res) => {
         ├── login.ejs
         └── viewGuest.ejs
     ├── guest
+        ├── adminPanel.ejs
+        ├── hotelDetails.ejs
         ├── form.ejs
         ├── hotels.ejs
         ├── signup.ejs
@@ -1515,10 +1530,8 @@ const { verifyToken } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
 
 // Public routes
-
 router.get('/login', (req, res) => {
     if (req.user) {
-        // Redirect to dashboard if the admin is already logged in
         return res.redirect('/admin/dashboard');
     }
     res.render('admin/login', { error: null });
@@ -1565,11 +1578,9 @@ router.get('/dashboard', verifyToken, async (req, res) => {
 router.post('/hotels/:id/delete', adminController.deleteHotel);
 
 router.get('/guests', guestController.getGuests); // List all guests
-router.get('/edit-guest/:guestId', guestController.getGuestDetails); // Edit guest details
-router.post('/edit-guest/:guestId', guestController.editGuest); // Handle editing guest
 router.get('/hotels', adminController.getHotels);
 router.post('/add-hotel', upload, adminController.addHotel);
-router.get('/hotels/:hotelId/guests', adminController.getGuests);
+router.get('/guests', adminController.getGuests);
 
 module.exports = router;
 ```
@@ -1582,56 +1593,39 @@ const router = express.Router();
 const guestController = require('../controllers/guestController');
 const Hotel = require('../models/hotel');
 
+// Guest login and signup
+router.get('/', guestController.showLogin);
 
+router.get('/login', guestController.showLogin);
 router.post('/login', guestController.login);
+router.get('/signup', guestController.showSignup);
 router.post('/signup', guestController.signup);
 
+// Guest form routes
 router.get('/form', async (req, res) => {
-    const hotels = await Hotel.find(); // Fetch all hotels
+    const hotels = await Hotel.find();
     if (hotels.length === 1) {
-        // Redirect to the only hotel's form if only one hotel exists
-        return res.redirect(`/guest/form/${hotels[0]._id}`); // Fixed URL
+        return res.redirect(`/guest/form/${hotels[0]._id}`);
     }
-
-    res.render('guest/form', { 
-        hotel: null, 
+    res.render('guest/form', {
+        hotel: null,
         pageTitle: 'Guest Registration',
         errors: [],
         formData: {},
-        hotels: hotels
+        hotels
     });
 });
-// Static route to render the guest registration form
 router.get('/form/:hotelId', guestController.showForm);
+router.post('/form/:hotelId', guestController.submitForm);
 
-// Route to submit the registration form
-router.post('/form', guestController.submitForm);
-
-// Route to get the list of guests (Admin)
-router.get('/guests', guestController.getGuests);
-router.post('/guests', guestController.addGuest);
-
-// List of hotels and hotel details
+// Hotel routes for guests
 router.get('/hotels', guestController.listHotels);
 router.get('/hotel/:id', guestController.hotelDetails);
 
-router.get('/login', (req, res) => res.render('guest/login', { error: null }));
-router.post('/login', guestController.login);
-
-// Guest signup routes
-router.get('/signup', (req, res) => res.render('guest/signup', { errors: [] }));
-router.post('/signup', guestController.signup);
-
 // Guest admin panel
-// router.get('/admin', guestController.adminPanel);
-router.get('/admin/guest/:id', guestController.viewGuest);
-router.post('/admin/guest/:id/edit', guestController.editGuest);
-
-// Dynamic route to show the form for a specific hotel
-router.get('/:hotelId', guestController.showForm);
-router.post('/:hotelId', guestController.submitForm);
-
-router.get('/', (req, res) => res.render('index', { error: null })); // Home page shows guest login
+router.get('/admin/guests/:hotelId', guestController.getGuests);
+router.get('/admin/edit-guest/:guestId', guestController.getGuestDetails);
+router.post('/admin/edit-guest/:guestId', guestController.editGuest);
 
 module.exports = router;
 ```
@@ -1790,7 +1784,7 @@ module.exports = generateQRCode;
                 <td><%= guest.mobileNumber %></td>
                 <td><%= guest.purpose %></td>
                 <td>
-                    <a href="/admin/edit-guest/<%= guest._id %>" class="btn btn-primary btn-sm">Edit</a>
+                    <a href="/admin/view-guest/<%= guest._id %>" class="btn btn-primary btn-sm">View</a>
                 </td>
             </tr>
         <% }) %>
@@ -2000,8 +1994,7 @@ module.exports = generateQRCode;
                     <td><%= guest.email %></td>
                     <td><%= guest.mobileNumber %></td>
                     <td>
-                        <a href="/guest/admin/guest/<%= guest._id %>/view" class="btn btn-info btn-sm">View</a>
-                        <a href="/guest/admin/guest/<%= guest._id %>/edit" class="btn btn-warning btn-sm">Edit</a>
+                        <a href="/guest/admin/edit-guest/<%= guest._id %>" class="btn btn-warning btn-sm">Edit</a>
                     </td>
                 </tr>
             <% }) %>
@@ -2355,4 +2348,3 @@ module.exports = generateQRCode;
 </body>
 </html>
 ```
-
