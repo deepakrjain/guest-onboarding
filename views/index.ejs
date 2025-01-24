@@ -1,11 +1,14 @@
 <div class="text-center">
-    <h1>Welcome to the Digital Guest Onboarding System</h1>
+    <h1 class="display-4 fw-bold mt-5 text-primary">Welcome to the Digital Guest Onboarding System</h1>
+    <p class="lead mt-3 text-muted">Seamless registration and management for guests and administrators.</p>
+    
     <% if (message) { %>
-        <div class="alert alert-danger"><%= message %></div>
+        <div class="alert alert-danger w-50 mx-auto"><%= message %></div>
     <% } %>
-    <div class="mt-4">
-        <a href="/guest/login" class="btn btn-primary">Guest Login</a>
-        <a href="/guest/signup" class="btn btn-success">Guest Signup</a>
-        <a href="/admin/login" class="btn btn-secondary">Admin Login</a>
+
+    <div class="mt-5">
+        <a href="/guest/login" class="btn btn-lg btn-outline-primary mx-2">Guest Login</a>
+        <a href="/guest/signup" class="btn btn-lg btn-outline-success mx-2">Guest Signup</a>
+        <a href="/admin/login" class="btn btn-lg btn-outline-secondary mx-2">Admin Login</a>
     </div>
 </div>

@@ -11,6 +11,16 @@ router.post('/login', guestController.login);
 router.get('/signup', guestController.showSignup);
 router.post('/signup', guestController.signup);
 
+// Route for listing all hotels
+router.get('/hotels', guestController.listHotels);
+
+// Route for viewing hotel details
+router.get('/hotel/:id', guestController.hotelDetails);
+
+// Route for the guest registration form for a specific hotel
+router.get('/form/:hotelId', guestController.showForm);
+router.post('/form/:hotelId', guestController.submitForm);
+
 // Guest form routes
 router.get('/form', async (req, res) => {
     const hotels = await Hotel.find();

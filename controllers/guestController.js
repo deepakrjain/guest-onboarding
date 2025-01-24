@@ -65,36 +65,38 @@ exports.listHotels = async (req, res) => {
 
 exports.showForm = async (req, res) => {
     try {
-        const hotelId = req.params.hotelId; // Get the hotel ID from the URL
-        const hotel = await Hotel.findById(hotelId); // Fetch the selected hotel
+        const hotelId = req.params.hotelId; // Fetch the hotelId from the route parameter
+        const hotel = await Hotel.findById(hotelId); // Find the hotel by ID
 
         if (!hotel) {
-            return res.status(404).render('guest/form', {
-                hotel: null,
-                pageTitle: 'Guest Registration',
-                errors: [{ msg: 'Selected hotel not found.' }],
-                formData: {},
-                hotels: [] // Pass an empty list
-            });
+            return res.status(404).send('Hotel not found');
         }
 
-        // Fetch all hotels for dropdown in case it's needed
-        const hotels = await Hotel.find();
-
-        res.render('guest/form', {
-            pageTitle: 'Guest Registration',
-            errors: [],
+        // Render the dedicated form view
+        res.render('guest/registerForm', {
+            pageTitle: `Register at ${hotel.name}`,
+            hotel, // Pass the selected hotel's details
             formData: {}, // Empty form data initially
-            hotels, // List of all hotels
-            hotel // Selected hotel details
         });
     } catch (error) {
-        console.error('Error fetching hotel details for the form:', error);
-        res.status(500).render('guest/form', {
+        console.error('Error fetching hotel details for form:', error);
+        res.status(500).send('An error occurred while fetching the hotel details.');
+    }
+};
+
+exports.listHotels = async (req, res) => {
+    try {
+        const hotels = await Hotel.find(); // Fetch all hotels
+        res.render('guest/hotelList', {
+            pageTitle: 'Available Hotels',
+            hotels, // Pass the list of hotels
+        });
+    } catch (error) {
+        console.error('Error fetching hotels:', error);
+        res.status(500).render('guest/hotelList', {
             pageTitle: 'Error',
-            errors: [{ msg: 'An error occurred while fetching the hotel details.' }],
-            formData: {},
-            hotels: [] // Empty hotels array
+            hotels: [],
+            error: 'An error occurred while fetching the list of hotels.',
         });
     }
 };
@@ -263,15 +265,16 @@ exports.submitForm = async (req, res) => {
         }
 
         if (!errors.isEmpty()) {
-            const hotels = await Hotel.find();
-            return res.render('guest/form', {
-                pageTitle: 'Guest Registration',
+            const hotel = await Hotel.findById(req.body.hotel);
+            return res.render('guest/registerForm', {
+                pageTitle: `Register at ${hotel.name}`,
                 formData: req.body,
+                hotel,
                 errors: errors.array(),
-                hotels,
             });
         }
 
+        // Create a new guest record
         const guest = new Guest({
             hotel: req.body.hotel,
             fullName: req.body.fullName.trim(),
@@ -294,7 +297,7 @@ exports.submitForm = async (req, res) => {
         });
     } catch (err) {
         console.error('Guest form submission error:', err.message);
-        res.status(500).render('index', {
+        res.status(500).render('guest/registerForm', {
             pageTitle: 'Error',
             message: 'An error occurred while submitting the form. Please try again.',
         });

@@ -1,19 +1,25 @@
-// models/guest.js
-const mongoose = require('mongoose');
+const mongoose = require('mongoose'); // Import mongoose
 
 const guestSchema = new mongoose.Schema({
     hotel: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Hotel',
-        required: false
+        required: true
     },
     fullName: {
         type: String,
         required: true,
         trim: true
     },
-    username: { type: String, unique: true, required: true },
-    password: { type: String, required: true },
+    username: { 
+        type: String, 
+        unique: true, 
+        required: false // Changed to `false`
+    },
+    password: { 
+        type: String, 
+        required: false // Changed to `false`
+    },
     mobileNumber: {
         type: String,
         required: true,

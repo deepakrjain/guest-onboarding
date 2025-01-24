@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guest Registration - <%= hotel.name %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container mt-4">
+        <h2 class="text-center mb-4">Guest Registration for <%= hotel.name %></h2>
+        <form method="POST" action="/guest/form/<%= hotel._id %>">
+            <div class="mb-3">
+                <label for="fullName" class="form-label">Full Name</label>
+                <input type="text" class="form-control" id="fullName" name="fullName" value="<%= formData?.fullName || '' %>" required>
+            </div>
+            <div class="mb-3">
+                <label for="mobileNumber" class="form-label">Mobile Number</label>
+                <input type="tel" class="form-control" id="mobileNumber" name="mobileNumber" pattern="[0-9]{10}" value="<%= formData?.mobileNumber || '' %>" required>
+            </div>
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <input type="email" class="form-control" id="email" name="email" value="<%= formData?.email || '' %>" required>
+            </div>
+            <div class="mb-3">
+                <label for="address" class="form-label">Address</label>
+                <textarea class="form-control" id="address" name="address" rows="3" required><%= formData?.address || '' %></textarea>
+            </div>
+            <input type="hidden" name="hotel" value="<%= hotel._id %>">
+            <div class="mb-3">
+                <label for="purpose" class="form-label">Purpose of Visit</label>
+                <select class="form-control" id="purpose" name="purpose" required>
+                    <option value="">Select Purpose</option>
+                    <option value="Business" <%= formData?.purpose === 'Business' ? 'selected' : '' %>>Business</option>
+                    <option value="Personal" <%= formData?.purpose === 'Personal' ? 'selected' : '' %>>Personal</option>
+                    <option value="Tourist" <%= formData?.purpose === 'Tourist' ? 'selected' : '' %>>Tourist</option>
+                </select>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="fromDate" class="form-label">Check-in Date</label>
+                    <input type="date" class="form-control" id="fromDate" name="stayDates[from]" min="<%= new Date().toISOString().split('T')[0] %>" value="<%= formData?.stayDates?.from || '' %>" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="toDate" class="form-label">Check-out Date</label>
+                    <input type="date" class="form-control" id="toDate" name="stayDates[to]" value="<%= formData?.stayDates?.to || '' %>" required>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="idProofNumber" class="form-label">ID Proof Number</label>
+                <input type="text" class="form-control" id="idProofNumber" name="idProofNumber" value="<%= formData?.idProofNumber || '' %>" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Submit Registration</button>
+        </form>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
