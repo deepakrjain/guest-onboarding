@@ -1,0 +1,16 @@
+<% content = 'layout' %>
+<div class="container mt-4">
+    <h1><%= hotel.name %> Details</h1>
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Hotel Information</h5>
+            <p><strong>Name:</strong> <%= hotel.name %></p>
+            <p><strong>Address:</strong> <%= hotel.address %></p>
+            <p><strong>Description:</strong> <%= hotel.description %></p>
+            <% if (hotel.logo) { %>
+                <img src="/uploads/<%= hotel.logo %>" alt="Hotel Logo" class="img-fluid mb-3">
+            <% } %>
+            <a href="/admin/hotels/<%= hotel._id %>/guests" class="btn btn-primary">View Guests</a>
+        </div>
+    </div>
+</div>

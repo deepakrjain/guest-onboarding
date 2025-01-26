@@ -30,6 +30,10 @@
             </div>
             <input type="hidden" name="hotel" value="<%= hotel._id %>">
             <div class="mb-3">
+                <label for="idProofNumber" class="form-label">ID Proof Number</label>
+                <input type="text" class="form-control" id="idProofNumber" name="idProofNumber" value="<%= formData?.idProofNumber || '' %>" required>
+            </div>
+            <div class="mb-3">
                 <label for="purpose" class="form-label">Purpose of Visit</label>
                 <select class="form-control" id="purpose" name="purpose" required>
                     <option value="">Select Purpose</option>
@@ -47,10 +51,6 @@
                     <label for="toDate" class="form-label">Check-out Date</label>
                     <input type="date" class="form-control" id="toDate" name="stayDates[to]" value="<%= formData?.stayDates?.to || '' %>" required>
                 </div>
-            </div>
-            <div class="mb-3">
-                <label for="idProofNumber" class="form-label">ID Proof Number</label>
-                <input type="text" class="form-control" id="idProofNumber" name="idProofNumber" value="<%= formData?.idProofNumber || '' %>" required>
             </div>
             <button type="submit" class="btn btn-primary w-100">Submit Registration</button>
         </form>

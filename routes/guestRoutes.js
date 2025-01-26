@@ -43,8 +43,22 @@ router.get('/hotels', guestController.listHotels);
 router.get('/hotel/:id', guestController.hotelDetails);
 
 // Guest admin panel
+router.get('/admin/panel', guestController.showAdminPanel);
 router.get('/admin/guests/:hotelId', guestController.getGuests);
 router.get('/admin/edit-guest/:guestId', guestController.getGuestDetails);
 router.post('/admin/edit-guest/:guestId', guestController.editGuest);
+
+// Guest logout
+router.get('/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Error destroying session:', err);
+            return res.status(500).redirect('/guest/hotels');
+        }
+        res.redirect('/guest/login');
+    });
+});
+
+router.get('/admin/panel', guestController.showAdminPanel);
 
 module.exports = router;

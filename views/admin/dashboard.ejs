@@ -9,7 +9,9 @@
                 <div class="card bg-primary text-white mb-4">
                     <div class="card-body">
                         <h5 class="card-title">Total Hotels</h5>
-                        <h2><%= hotels.length %></h2>
+                        <h2>
+                            <%= hotels.length %>
+                        </h2>
                     </div>
                 </div>
             </div>
@@ -17,7 +19,9 @@
                 <div class="card bg-success text-white mb-4">
                     <div class="card-body">
                         <h5 class="card-title">Total Guests</h5>
-                        <h2><%= totalGuests %></h2>
+                        <h2>
+                            <%= totalGuests %>
+                        </h2>
                     </div>
                 </div>
             </div>
@@ -25,7 +29,9 @@
                 <div class="card bg-info text-white mb-4">
                     <div class="card-body">
                         <h5 class="card-title">Today's Check-ins</h5>
-                        <h2><%= todayCheckIns %></h2>
+                        <h2>
+                            <%= todayCheckIns %>
+                        </h2>
                     </div>
                 </div>
             </div>
@@ -50,17 +56,27 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <% hotels.forEach(hotel => { %>
+                                    <% hotels.forEach(hotel=> { %>
                                         <tr>
-                                            <td><%= hotel.name %></td>
-                                            <td><%= hotel.todayGuests || 0 %></td>
-                                            <td><%= hotel.totalGuests || 0 %></td>
                                             <td>
-                                                <a href="/admin/hotels/<%= hotel._id %>" class="btn btn-sm btn-info">View</a>
-                                                <a href="/admin/hotels/<%= hotel._id %>/guests" class="btn btn-sm btn-primary">Guests</a>
+                                                <%= hotel.name %>
+                                            </td>
+                                            <td>
+                                                <%= hotel.todayGuests || 0 %>
+                                            </td>
+                                            <td>
+                                                <%= hotel.totalGuests || 0 %>
+                                            </td>
+                                            <td>
+                                                <!-- View hotel details -->
+                                                <a href="/admin/hotels/<%= hotel._id %>"
+                                                    class="btn btn-sm btn-info">View</a>
+                                                <!-- View all guests for the hotel -->
+                                                <a href="/admin/hotels/<%= hotel._id %>/guests"
+                                                    class="btn btn-sm btn-primary">Guests</a>
                                             </td>
                                         </tr>
-                                    <% }); %>
+                                        <% }); %>
                                 </tbody>
                             </table>
                         </div>

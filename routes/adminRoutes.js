@@ -32,22 +32,25 @@ router.get('/dashboard', verifyToken, async (req, res) => {
 
         // Get today's check-ins
         const today = new Date();
-        today.setHours(0, 0, 0, 0);  // Set time to start of the day
+        today.setHours(0, 0, 0, 0); // Set time to start of the day
         const todayCheckIns = await Guest.countDocuments({
             'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) }
         });
 
-        // Get guest data for the dashboard
-        const guests = await Guest.find().limit(10); // Example: fetching 10 guests (you can change the limit)
+        // Fetch recent guests (limit to 10)
+        const recentGuests = await Guest.find()
+            .sort({ createdAt: -1 }) // Sort by most recent
+            .limit(10) // Limit to 10 guests
+            .populate('hotel', 'name'); // Include hotel name in guest data
 
         // Pass the fetched data to the view
         res.render('admin/dashboard', {
-            user: req.user,  // User info from token
+            user: req.user, // User info from token
             pageTitle: 'Admin Dashboard',
             hotels,
-            guests,
             totalGuests,
-            todayCheckIns
+            todayCheckIns,
+            recentGuests // Include recentGuests
         });
     } catch (error) {
         console.error('Error fetching dashboard data:', error);
@@ -55,11 +58,18 @@ router.get('/dashboard', verifyToken, async (req, res) => {
     }
 });
 
+
 router.post('/hotels/:id/delete', adminController.deleteHotel);
 
-router.get('/guests', guestController.getGuests); // List all guests
+router.get('/guests', guestController.getGuests);
 router.get('/hotels', adminController.getHotels);
 router.post('/add-hotel', upload, adminController.addHotel);
 router.get('/guests', adminController.getGuests);
+
+// Route to view guest details
+router.get('/guests/:id', adminController.viewGuestDetails);
+
+// Route to handle actions on a guest
+router.get('/guests/:id/actions', adminController.guestActions);
 
 module.exports = router;

@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Main Admin Dashboard
+// Fix in `adminController.js`
 exports.dashboard = async (req, res) => {
     try {
         const hotels = await Hotel.find();
@@ -12,7 +13,7 @@ exports.dashboard = async (req, res) => {
         today.setHours(0, 0, 0, 0);
 
         // Get total number of guests
-        const totalGuests = await Guest.countDocuments(); // Fetch total guest count
+        const totalGuests = await Guest.countDocuments();
 
         // Get today's check-ins
         const todayCheckIns = await Guest.countDocuments({
@@ -34,14 +35,20 @@ exports.dashboard = async (req, res) => {
             })
         );
 
+        // Fetch recent guests (limit to 10)
+        const recentGuests = await Guest.find()
+            .sort({ createdAt: -1 }) // Sort by most recent
+            .limit(10) // Limit to 10 guests
+            .populate('hotel', 'name'); // Include hotel name in guest data
+
         // Pass data to the view
         res.render('admin/dashboard', {
             pageTitle: 'Admin Dashboard',
-            hotels: hotelsWithStats,  // Send the list of hotels with stats
-            totalGuests,             // Send totalGuests count
-            todayCheckIns,           // Send today's check-ins count
+            hotels: hotelsWithStats,
+            totalGuests,
+            todayCheckIns,
+            recentGuests, // Pass recent guests
         });
-
     } catch (error) {
         console.error('Error loading dashboard:', error);
         res.status(500).render('index', {
@@ -50,6 +57,7 @@ exports.dashboard = async (req, res) => {
         });
     }
 };
+
 
 // Guest Admin Dashboard
 exports.guestDashboard = async (req, res) => {
@@ -232,6 +240,67 @@ exports.getGuests = async (req, res) => {
         res.redirect('/admin/hotels');
     }
 };
+
+exports.viewGuestDetails = async (req, res) => {
+    try {
+        const guestId = req.params.id;
+
+        // Fetch guest details
+        const guest = await Guest.findById(guestId).populate('hotel');
+        if (!guest) {
+            return res.status(404).render('admin/guestDetails', {
+                pageTitle: 'Guest Not Found',
+                error: 'The requested guest does not exist.',
+                guest: null
+            });
+        }
+
+        // Render the guest details page
+        res.render('admin/guestDetails', {
+            pageTitle: `Details for ${guest.fullName}`,
+            guest,
+            error: null
+        });
+    } catch (err) {
+        console.error('Error fetching guest details:', err.message);
+        res.status(500).render('admin/guestDetails', {
+            pageTitle: 'Error',
+            error: 'An error occurred while fetching guest details.',
+            guest: null
+        });
+    }
+};
+
+exports.guestActions = async (req, res) => {
+    try {
+        const guestId = req.params.id;
+
+        // Fetch guest details
+        const guest = await Guest.findById(guestId).populate('hotel');
+        if (!guest) {
+            return res.status(404).render('admin/editGuest', {
+                pageTitle: 'Guest Not Found',
+                error: 'The requested guest does not exist.',
+                guest: null
+            });
+        }
+
+        // Render the edit guest page
+        res.render('admin/editGuest', {
+            pageTitle: `Actions for ${guest.fullName}`,
+            guest,
+            error: null
+        });
+    } catch (err) {
+        console.error('Error loading guest actions:', err.message);
+        res.status(500).render('admin/editGuest', {
+            pageTitle: 'Error',
+            error: 'An error occurred while loading guest actions.',
+            guest: null
+        });
+    }
+};
+
 
 exports.viewGuest = async (req, res) => {
     try {
