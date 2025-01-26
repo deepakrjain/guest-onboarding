@@ -5,7 +5,6 @@ const path = require('path');
 const fs = require('fs');
 
 // Main Admin Dashboard
-// Fix in `adminController.js`
 exports.dashboard = async (req, res) => {
     try {
         const hotels = await Hotel.find();
@@ -17,7 +16,7 @@ exports.dashboard = async (req, res) => {
 
         // Get today's check-ins
         const todayCheckIns = await Guest.countDocuments({
-            'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
+            'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) }
         });
 
         // Fetch hotels with today's guests and total guests
@@ -179,29 +178,29 @@ exports.deleteHotel = async (req, res) => {
     }
 };
 
-exports.searchGuests = async (req, res) => {
+exports.getHotelGuests = async (req, res) => {
     try {
-        const { query } = req.query;
-        const hotelId = req.user.role === 'mainAdmin' ? req.query.hotelId : req.user.hotelId;
+        const hotelId = req.params.id;
+        const hotel = await Hotel.findById(hotelId);
+        if (!hotel) {
+            return res.status(404).render('admin/guestDetails', {
+                error: 'Hotel not found'
+            });
+        }
 
-        const searchCriteria = {
-            hotel: hotelId,
-            $or: [
-                { fullName: new RegExp(query, 'i') },
-                { email: new RegExp(query, 'i') },
-                { mobileNumber: new RegExp(query, 'i') }
-            ]
-        };
+        const guests = await Guest.find({ hotel: hotelId });
 
-        const guests = await Guest.find(searchCriteria).limit(10);
-        
-        res.json(guests);
+        res.render('admin/guestDetails', { 
+            hotel, 
+            guests, 
+            user: req.user
+        });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Error searching guests' });
-
+        console.error('Error fetching hotel guests:', error);
+        res.status(500).send('Internal Server Error');
     }
 };
+
 
 // Add this new function - don't replace entire file
 exports.generateQRCode = async (req, res) => {

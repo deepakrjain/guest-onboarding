@@ -1,23 +1,22 @@
-<h1>Guest Details</h1>
+<h3>Guests for <%= hotel.name %></h3>
+
 <table class="table">
     <thead>
         <tr>
-            <th>Name</th>
-            <th>Mobile</th>
-            <th>Purpose</th>
-            <th>Actions</th>
+            <th>Full Name</th>
+            <th>Email</th>
+            <th>Check-in Date</th>
+            <th>Check-out Date</th>
         </tr>
     </thead>
     <tbody>
         <% guests.forEach(guest => { %>
-            <tr>
-                <td><%= guest.fullName %></td>
-                <td><%= guest.mobileNumber %></td>
-                <td><%= guest.purpose %></td>
-                <td>
-                    <a href="/admin/view-guest/<%= guest._id %>" class="btn btn-primary btn-sm">View</a>
-                </td>
-            </tr>
+        <tr>
+            <td><%= guest.fullName %></td>
+            <td><%= guest.email %></td>
+            <td><%= guest.stayDates ? guest.stayDates.from.toDateString() : 'N/A' %></td>
+            <td><%= guest.stayDates ? guest.stayDates.to.toDateString() : 'N/A' %></td>
+        </tr>
         <% }) %>
     </tbody>
 </table>

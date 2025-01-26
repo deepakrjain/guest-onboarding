@@ -38,7 +38,6 @@ router.get('/form', async (req, res) => {
 router.get('/form/:hotelId', guestController.showForm);
 router.post('/form/:hotelId', guestController.submitForm);
 
-// Hotel routes for guests
 router.get('/hotels', guestController.listHotels);
 router.get('/hotel/:id', guestController.hotelDetails);
 
@@ -48,16 +47,18 @@ router.get('/admin/guests/:hotelId', guestController.getGuests);
 router.get('/admin/edit-guest/:guestId', guestController.getGuestDetails);
 router.post('/admin/edit-guest/:guestId', guestController.editGuest);
 
+router.get('/admin/view-guest/:guestId', guestController.viewGuestDetails);
+
 // Guest logout
 router.get('/logout', (req, res) => {
     req.session.destroy((err) => {
         if (err) {
             console.error('Error destroying session:', err);
-            return res.status(500).redirect('/guest/hotels');
         }
-        res.redirect('/guest/login');
+        res.redirect('/admin/login');
     });
 });
+
 
 router.get('/admin/panel', guestController.showAdminPanel);
 

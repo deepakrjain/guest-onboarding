@@ -35,33 +35,35 @@ exports.hotelDetails = async (req, res) => {
 
 exports.listHotels = async (req, res) => {
     try {
-        const hotels = await Hotel.find();
+        const hotels = await Hotel.find(); // Fetch all hotels from the database
+
+        // Check if there are any hotels available
         if (!hotels.length) {
-            return res.status(404).render('guest/form', {
+            return res.status(404).render('guest/hotelList', {
                 pageTitle: 'No Hotels Available',
-                errors: [{ msg: 'No hotels available at the moment.' }],
-                formData: {},
-                hotels: [], // Empty array to indicate no hotels
+                hotels: [], // Pass an empty array
+                error: 'No hotels are available at the moment.', // Display error message
             });
         }
 
-        // Pass hotels array to form.ejs
-        res.render('guest/form', {
+        // Render the hotelList.ejs view with the list of hotels
+        res.render('guest/hotelList', {
             pageTitle: 'Available Hotels',
-            errors: [],
-            formData: {},
             hotels, // Pass the list of hotels
+            error: null, // No errors
         });
     } catch (error) {
         console.error('Error fetching hotels:', error);
-        res.status(500).render('guest/form', {
+
+        // Handle any server errors
+        res.status(500).render('guest/hotelList', {
             pageTitle: 'Error',
-            errors: [{ msg: 'An error occurred while fetching the hotel list.' }],
-            formData: {},
-            hotels: [], // Empty array on error
+            hotels: [], // Pass an empty array
+            error: 'An error occurred while fetching the list of hotels.',
         });
     }
 };
+
 
 exports.showForm = async (req, res) => {
     try {
@@ -93,24 +95,6 @@ exports.showForm = async (req, res) => {
     } catch (err) {
         console.error('Error loading form:', err.message);
         res.status(500).send('An error occurred while loading the form');
-    }
-};
-
-
-exports.listHotels = async (req, res) => {
-    try {
-        const hotels = await Hotel.find(); // Fetch all hotels
-        res.render('guest/hotelList', {
-            pageTitle: 'Available Hotels',
-            hotels, // Pass the list of hotels
-        });
-    } catch (error) {
-        console.error('Error fetching hotels:', error);
-        res.status(500).render('guest/hotelList', {
-            pageTitle: 'Error',
-            hotels: [],
-            error: 'An error occurred while fetching the list of hotels.',
-        });
     }
 };
 
@@ -203,7 +187,7 @@ exports.showAdminPanel = async (req, res) => {
 
 // Guest signup
 exports.signup = async (req, res) => {
-    const { username, password, confirmPassword } = req.body;
+    const { username, password, confirmPassword, hotelId } = req.body;
 
     if (password !== confirmPassword) {
         return res.render('guest/signup', { errors: [{ msg: 'Passwords do not match' }] });
@@ -217,20 +201,31 @@ exports.signup = async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // Allow the user to select a hotel, or assign the first available hotel
+        const selectedHotel = hotelId || (await Hotel.findOne()); // If no hotelId, select the first hotel
+
+        if (!selectedHotel) {
+            return res.render('guest/signup', { 
+                errors: [{ msg: 'No hotels available for signup. Contact admin.' }] 
+            });
+        }
+
+        const uniqueIdProofNumber = `ID-${Date.now()}`;
+
         const newGuest = new Guest({
             username,
             password: hashedPassword,
-            fullName: 'Guest', // Default name for signup
-            mobileNumber: '0000000000', // Default mobile number
-            address: 'N/A', // Default address
-            purpose: 'Personal', // Default purpose
+            fullName: 'Guest',
+            mobileNumber: '0000000000',
+            address: 'N/A',
+            purpose: 'Personal',
             stayDates: {
-                from: new Date(), // Default current date
-                to: new Date(), // Default current date
+                from: new Date(),
+                to: new Date(),
             },
-            email: `${username}@example.com`, // Default email based on username
-            idProofNumber: '0000', // Default value for ID proof
-            hotel: null, // Can be updated later in the guest admin panel
+            email: `${username}@example.com`,
+            idProofNumber: uniqueIdProofNumber,
+            hotel: selectedHotel._id, // Use the selected or default hotel
         });
 
         await newGuest.save();
@@ -238,7 +233,9 @@ exports.signup = async (req, res) => {
         res.redirect('/guest/login');
     } catch (error) {
         console.error('Signup error:', error);
-        res.status(500).render('guest/signup', { errors: [{ msg: 'Internal server error' }] });
+        res.status(500).render('guest/signup', { 
+            errors: [{ msg: 'Internal server error. Please try again.' }] 
+        });
     }
 };
 
@@ -264,24 +261,36 @@ exports.getGuests = async (req, res) => {
     }
 };
 
-exports.viewGuest = async (req, res) => {
+exports.viewGuestDetails = async (req, res) => {
     try {
-        const guest = await Guest.findById(req.params.id).populate('hotel'); // Fetch guest and hotel details
+        const guest = await Guest.findById(req.params.guestId).populate('hotel'); // Fetch guest and hotel details
         if (!guest) {
-            return res.status(404).render('admin/guestDetails', {
+            return res.status(404).render('guest/adminPanel', {
                 pageTitle: 'Guest Not Found',
-                message: 'The guest details you are looking for do not exist.',
+                error: 'The guest details you are looking for do not exist.',
+                guests: [],
+                hotel: null
             });
         }
-        res.render('admin/viewGuest', { guest });
+
+        // Render the guest details view
+        res.render('guest/viewGuest', {
+            pageTitle: `Guest Details - ${guest.fullName}`,
+            guest,
+            hotel: guest.hotel,
+            error: null
+        });
     } catch (error) {
-        console.error('Error fetching guest details:', error);
-        res.status(500).render('index', {
+        console.error('Error fetching guest details:', error.message);
+        res.status(500).render('guest/adminPanel', {
             pageTitle: 'Error',
-            message: 'An error occurred while fetching guest details.',
+            error: 'An error occurred while fetching guest details.',
+            guests: [],
+            hotel: null
         });
     }
 };
+
 
 // Fetch a guest's details for editing
 exports.getGuestDetails = async (req, res) => {
@@ -303,15 +312,22 @@ exports.getGuestDetails = async (req, res) => {
     }
 };
 
-// Update guest's details after editing
+/// Update guest's details after editing
 exports.editGuest = async (req, res) => {
     try {
         const { fullName, mobileNumber, purpose, stayDates, email } = req.body;
+        
+        // Ensure stayDates is correctly parsed into Date objects
+        const updatedStayDates = {
+            from: new Date(stayDates.from),
+            to: new Date(stayDates.to),
+        };
+
         const updatedGuest = await Guest.findByIdAndUpdate(req.params.guestId, {
             fullName,
             mobileNumber,
             purpose,
-            stayDates,
+            stayDates: updatedStayDates,
             email,
         }, { new: true });
 
@@ -322,7 +338,8 @@ exports.editGuest = async (req, res) => {
             });
         }
 
-        res.redirect('/admin/guests');
+        // Redirect to the admin panel after successful update
+        res.redirect('/guest/admin/panel');
     } catch (error) {
         console.error('Error editing guest:', error);
         res.status(500).render('index', {
@@ -331,6 +348,7 @@ exports.editGuest = async (req, res) => {
         });
     }
 };
+
 
 
 exports.submitForm = async (req, res) => {

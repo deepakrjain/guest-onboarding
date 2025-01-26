@@ -39,6 +39,17 @@ app.use((req, res, next) => {
     next();
 });
 
+app.use((req, res, next) => {
+    if (req.session.guest) {
+        res.locals.user = { id: req.session.guest.id, role: 'guestAdmin' };
+    } else if (req.session.user) {
+        res.locals.user = { id: req.session.user.id, role: 'admin' };
+    } else {
+        res.locals.user = null;
+    }
+    next();
+});
+
 // Routes
 app.get('/', (req, res) => {
     res.render('index', { 

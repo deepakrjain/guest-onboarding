@@ -60,14 +60,16 @@ router.get('/dashboard', verifyToken, async (req, res) => {
 
 
 router.post('/hotels/:id/delete', adminController.deleteHotel);
-
+router.get('/hotels/:id/guests', adminController.getHotelGuests);
 router.get('/guests', guestController.getGuests);
-router.get('/hotels', adminController.getHotels);
+router.get('/hotels', guestController.listHotels);
 router.post('/add-hotel', upload, adminController.addHotel);
 router.get('/guests', adminController.getGuests);
 
 // Route to view guest details
 router.get('/guests/:id', adminController.viewGuestDetails);
+
+router.post('/admin/edit-guest/:guestId', guestController.editGuest);
 
 // Route to handle actions on a guest
 router.get('/guests/:id/actions', adminController.guestActions);
