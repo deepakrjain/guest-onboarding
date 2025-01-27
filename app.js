@@ -17,7 +17,6 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
-// View Engine Setup
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(expressLayouts);
@@ -28,7 +27,9 @@ app.use(session({
     secret: '1067',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false } 
+    cookie: { 
+        secure: process.env.NODE_ENV === 'production', // Secure in production
+    }
 }));
 
 // Global Middleware
@@ -77,7 +78,7 @@ app.use((req, res) => {
     });
 });
 
-// Initialize Database and Start Server
+// initialize database and start server
 const startServer = async () => {
     try {
         await connectDB();

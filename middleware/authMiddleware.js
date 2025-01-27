@@ -19,4 +19,19 @@ const verifyToken = (req, res, next) => {
     }
 };
 
+
+exports.ensureGuestLoggedIn = (req, res, next) => {
+    if (req.session.guest) {
+        return next();
+    }
+    res.redirect('/guest/login');
+};
+
+exports.ensureAdminLoggedIn = (req, res, next) => {
+    if (req.session.user) {
+        return next();
+    }
+    res.redirect('/admin/login');
+};
+
 module.exports = { verifyToken };

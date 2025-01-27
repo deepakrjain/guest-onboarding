@@ -39,7 +39,7 @@ exports.listHotels = async (req, res) => {
 
         // Check if there are any hotels available
         if (!hotels.length) {
-            return res.status(404).render('admin/hotels', {
+            return res.status(404).render('guest/hotelList', {
                 pageTitle: 'No Hotels Available',
                 hotels: [], // Pass an empty array
                 error: 'No hotels are available at the moment.', // Display error message
@@ -47,7 +47,7 @@ exports.listHotels = async (req, res) => {
         }
 
         // Render the hotelList.ejs view with the list of hotels
-        res.render('admin/hotels', {
+        res.render('guest/hotelList', {
             pageTitle: 'Available Hotels',
             hotels, // Pass the list of hotels
             error: null, // No errors
@@ -56,7 +56,7 @@ exports.listHotels = async (req, res) => {
         console.error('Error fetching hotels:', error);
 
         // Handle any server errors
-        res.status(500).render('admin/hotels', {
+        res.status(500).render('guest/hotelList', {
             pageTitle: 'Error',
             hotels: [], // Pass an empty array
             error: 'An error occurred while fetching the list of hotels.',
@@ -103,31 +103,26 @@ exports.showForm = async (req, res) => {
 exports.login = async (req, res) => {
     const { username, password } = req.body;
     try {
-        // Find the guest by username
         const guest = await Guest.findOne({ username }).populate('hotel');
         if (!guest) {
             return res.render('guest/login', { error: 'Invalid username or password' });
         }
 
-        // Verify the password
         const isMatch = await bcrypt.compare(password, guest.password);
         if (!isMatch) {
             return res.render('guest/login', { error: 'Invalid username or password' });
         }
 
-        // Ensure the guest has an associated hotel
         if (!guest.hotel) {
             return res.render('guest/login', { error: 'No associated hotel found. Contact admin.' });
         }
 
-        // Store guest and hotel information in the session
         req.session.guest = {
             id: guest._id,
             username: guest.username,
-            hotelId: guest.hotel._id, // Save the associated hotel's ID
+            hotelId: guest.hotel._id,
         };
 
-        // Redirect to the guest admin panel
         res.redirect('/guest/admin/panel');
     } catch (error) {
         console.error('Login error:', error);
@@ -135,38 +130,32 @@ exports.login = async (req, res) => {
     }
 };
 
-
 exports.showAdminPanel = async (req, res) => {
     try {
-        // Fetch the logged-in guest admin's hotel ID
-        const hotelId = req.session.guest?.hotelId;
+        const guestId = req.session.guest?.id;
 
-        // Ensure the session contains the hotel ID
-        if (!hotelId) {
+        if (!guestId) {
             return res.status(400).render('guest/adminPanel', {
                 pageTitle: 'Guest Admin Panel',
-                error: 'Hotel not found in session. Please log in again.',
+                error: 'Guest not logged in. Please log in again.',
                 guests: [],
                 hotel: null,
             });
         }
 
-        // Retrieve the hotel and its guests
-        const [hotel, guests] = await Promise.all([
-            Hotel.findById(hotelId),
-            Guest.find({ hotel: hotelId }),
-        ]);
-
-        if (!hotel) {
+        const guest = await Guest.findById(guestId).populate('hotel');
+        if (!guest) {
             return res.status(404).render('guest/adminPanel', {
                 pageTitle: 'Guest Admin Panel',
-                error: 'The associated hotel could not be found.',
+                error: 'Guest details not found.',
                 guests: [],
                 hotel: null,
             });
         }
 
-        // Render the admin panel with hotel and guest data
+        const hotel = guest.hotel;
+        const guests = await Guest.find({ _id: guestId });
+
         res.render('guest/adminPanel', {
             pageTitle: `Guest Admin Panel - ${hotel.name}`,
             hotel,
@@ -231,7 +220,7 @@ exports.signup = async (req, res) => {
 
 exports.getGuests = async (req, res) => {
     try {
-        const hotelId = req.params.hotelId; // Fetch hotel ID
+        const hotelId = req.params.hotelId;
         const guests = await Guest.find({ hotel: hotelId });
         const hotel = await Hotel.findById(hotelId);
 
@@ -252,7 +241,7 @@ exports.getGuests = async (req, res) => {
 
 exports.viewGuestDetails = async (req, res) => {
     try {
-        const guest = await Guest.findById(req.params.guestId).populate('hotel'); // Fetch guest and hotel details
+        const guest = await Guest.findById(req.params.guestId).populate('hotel');
         if (!guest) {
             return res.status(404).render('guest/adminPanel', {
                 pageTitle: 'Guest Not Found',
@@ -262,7 +251,6 @@ exports.viewGuestDetails = async (req, res) => {
             });
         }
 
-        // Render the guest details view
         res.render('guest/viewGuest', {
             pageTitle: `Guest Details - ${guest.fullName}`,
             guest,
@@ -306,7 +294,6 @@ exports.editGuest = async (req, res) => {
     try {
         const { fullName, mobileNumber, purpose, stayDates, email } = req.body;
         
-        // Ensure stayDates is correctly parsed into Date objects
         const updatedStayDates = {
             from: new Date(stayDates.from),
             to: new Date(stayDates.to),
@@ -327,7 +314,6 @@ exports.editGuest = async (req, res) => {
             });
         }
 
-        // Redirect to the admin panel after successful update
         res.redirect('/guest/admin/panel');
     } catch (error) {
         console.error('Error editing guest:', error);
@@ -359,7 +345,6 @@ exports.submitForm = async (req, res) => {
 
         const { fullName, mobileNumber, email, address, purpose, stayDates, idProofNumber } = req.body;
 
-        // Check for duplicate key error (username, idProofNumber)
         const username = `guest_${Date.now()}`;
         const existingGuest = await Guest.findOne({ idProofNumber });
         if (existingGuest) {
@@ -401,8 +386,8 @@ exports.submitForm = async (req, res) => {
 
 exports.showSignup = async (req, res) => {
     try {
-        const hotels = await Hotel.find(); // Fetch hotels from the database
-        res.render('guest/signup', { errors: [], hotels }); // Pass hotels to the view
+        const hotels = await Hotel.find();
+        res.render('guest/signup', { errors: [], hotels });
     } catch (error) {
         console.error('Error fetching hotels:', error.message);
         res.status(500).render('guest/signup', {

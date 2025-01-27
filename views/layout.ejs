@@ -108,7 +108,7 @@
                                 href="<%= user.role === 'admin' ? '/admin/dashboard' : '/guest/admin/panel' %>">Home</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/logout">Logout</a>
+                            <a class="nav-link" href="<%= user.role === 'admin' ? '/admin/logout' : '/guest/logout' %>">Logout</a>
                         </li>
                     <% } else { %>
                         <li class="nav-item">

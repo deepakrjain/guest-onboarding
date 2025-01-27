@@ -26,6 +26,7 @@
                                             <th>Mobile</th>
                                             <th>Purpose</th>
                                             <th>Stay Dates</th>
+                                            <th>Hotel</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -42,9 +43,13 @@
                                                     <%= guest.purpose %>
                                                 </td>
                                                 <td>
+                                                    <%= guest.hotel?.name || 'N/A' %>
+                                                </td>
+                                                <td>
                                                     <%= guest.stayDates.from.toLocaleDateString() %> - <%=
                                                             guest.stayDates.to.toLocaleDateString() %>
                                                 </td>
+
                                                 <td>
                                                     <a href="/guest/admin/edit-guest/<%= guest._id %>"
                                                         class="btn btn-sm btn-warning">Edit</a>
@@ -52,14 +57,14 @@
                                                         class="btn btn-sm btn-info">View</a>
                                                 </td>
                                             </tr>
-                                            <% }) %>    
+                                            <% }) %>
                                     </tbody>
                                 </table>
                             </div>
                             <% } else { %>
                                 <div class="alert alert-info mt-4">No guests found for this hotel.</div>
                                 <% } %>
-                                <div class="mt-4">
-                                    <a href="/guest/hotels" class="btn btn-primary">View Available Hotels</a>
-                                </div>
+                                    <div class="mt-4">
+                                        <a href="/guest/hotels" class="btn btn-primary">View Available Hotels</a>
+                                    </div>
 </div>

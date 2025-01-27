@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const guestController = require('../controllers/guestController');
 const Hotel = require('../models/hotel');
+const { ensureGuestLoggedIn } = require('../middleware/authMiddleware');
 
 // Guest login and signup
 router.get('/', guestController.showLogin);
@@ -37,8 +38,6 @@ router.get('/form', async (req, res) => {
 });
 router.get('/form/:hotelId', guestController.showForm);
 router.post('/form/:hotelId', guestController.submitForm);
-
-router.get('/hotels', guestController.listHotels);
 router.get('/hotel/:id', guestController.hotelDetails);
 
 // Guest admin panel
@@ -55,7 +54,7 @@ router.get('/logout', (req, res) => {
         if (err) {
             console.error('Error destroying session:', err);
         }
-        res.redirect('/admin/login');
+        res.redirect('/guest/login'); // Redirect guests to guest login after logout
     });
 });
 

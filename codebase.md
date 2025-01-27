@@ -28,10 +28,10 @@ app.set('layout', 'layout');
 
 // Session Configuration
 app.use(session({
-    secret: '1067',
+    secret: '1067', // Replace with a strong secret key
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false } 
+    cookie: { secure: false },
 }));
 
 // Global Middleware
@@ -676,38 +676,32 @@ exports.login = async (req, res) => {
     }
 };
 
-
 exports.showAdminPanel = async (req, res) => {
     try {
-        // Fetch the logged-in guest admin's hotel ID
-        const hotelId = req.session.guest?.hotelId;
+        const guestId = req.session.guest?.id;
 
-        // Ensure the session contains the hotel ID
-        if (!hotelId) {
+        if (!guestId) {
             return res.status(400).render('guest/adminPanel', {
                 pageTitle: 'Guest Admin Panel',
-                error: 'Hotel not found in session. Please log in again.',
+                error: 'Guest not logged in. Please log in again.',
                 guests: [],
                 hotel: null,
             });
         }
 
-        // Retrieve the hotel and its guests
-        const [hotel, guests] = await Promise.all([
-            Hotel.findById(hotelId),
-            Guest.find({ hotel: hotelId }),
-        ]);
-
-        if (!hotel) {
+        const guest = await Guest.findById(guestId).populate('hotel');
+        if (!guest) {
             return res.status(404).render('guest/adminPanel', {
                 pageTitle: 'Guest Admin Panel',
-                error: 'The associated hotel could not be found.',
+                error: 'Guest details not found.',
                 guests: [],
                 hotel: null,
             });
         }
 
-        // Render the admin panel with hotel and guest data
+        const hotel = guest.hotel;
+        const guests = await Guest.find({ hotel: hotel._id });
+
         res.render('guest/adminPanel', {
             pageTitle: `Guest Admin Panel - ${hotel.name}`,
             hotel,
@@ -726,18 +720,20 @@ exports.showAdminPanel = async (req, res) => {
 };
 
 
-// Guest signup
 exports.signup = async (req, res) => {
-    const { username, password, confirmPassword, hotelId, fullName, mobileNumber, address, purpose, stayFrom, stayTo, idProofNumber } = req.body;
+    const { username, password, confirmPassword, hotelId, fullName, mobileNumber, email, address, purpose, stayFrom, stayTo, idProofNumber } = req.body;
 
     if (password !== confirmPassword) {
         return res.render('guest/signup', { errors: [{ msg: 'Passwords do not match' }], hotels: await Hotel.find() });
     }
 
     try {
-        const existingGuest = await Guest.findOne({ username });
+        const existingGuest = await Guest.findOne({ idProofNumber });
         if (existingGuest) {
-            return res.render('guest/signup', { errors: [{ msg: 'Username already taken' }], hotels: await Hotel.find() });
+            return res.render('guest/signup', {
+                errors: [{ msg: `Guest with ID proof number ${idProofNumber} already exists.` }],
+                hotels: await Hotel.find(),
+            });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -747,6 +743,7 @@ exports.signup = async (req, res) => {
             password: hashedPassword,
             fullName,
             mobileNumber,
+            email,
             address,
             purpose,
             stayDates: {
@@ -758,13 +755,13 @@ exports.signup = async (req, res) => {
         });
 
         await newGuest.save();
-
         res.redirect('/guest/login');
     } catch (error) {
         console.error('Signup error:', error);
         res.status(500).render('guest/signup', { errors: [{ msg: 'Internal server error' }], hotels: await Hotel.find() });
     }
 };
+
 
 
 exports.getGuests = async (req, res) => {
@@ -1037,6 +1034,21 @@ const verifyToken = (req, res, next) => {
         res.clearCookie('token'); // Clear invalid token
         res.redirect('/admin/login'); // Redirect if token is invalid
     }
+};
+
+
+exports.ensureGuestLoggedIn = (req, res, next) => {
+    if (req.session.guest) {
+        return next();
+    }
+    res.redirect('/guest/login');
+};
+
+exports.ensureAdminLoggedIn = (req, res, next) => {
+    if (req.session.user) {
+        return next();
+    }
+    res.redirect('/admin/login');
 };
 
 module.exports = { verifyToken };
@@ -1662,6 +1674,7 @@ const Hotel = require('../models/hotel');
 const Guest = require('../models/guest');
 const { verifyToken } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
+const { ensureAdminLoggedIn } = require('../middleware/authMiddleware');
 
 // Public routes
 router.get('/login', (req, res) => {
@@ -1672,11 +1685,19 @@ router.get('/login', (req, res) => {
 });
 
 router.post('/login', authController.login);
-router.get('/logout', authController.logout);
+router.get('/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Error destroying session:', err);
+        }
+        res.redirect('/admin/login'); // Redirect admins to admin login after logout
+    });
+});
 
 // Protected routes
 router.use(verifyToken);
-router.get('/dashboard', verifyToken, async (req, res) => {
+
+router.get('/dashboard', async (req, res) => {
     try {
         // Fetch hotels from the database
         const hotels = await Hotel.find();
@@ -1688,7 +1709,7 @@ router.get('/dashboard', verifyToken, async (req, res) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0); // Set time to start of the day
         const todayCheckIns = await Guest.countDocuments({
-            'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) }
+            'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
         });
 
         // Fetch recent guests (limit to 10)
@@ -1699,12 +1720,12 @@ router.get('/dashboard', verifyToken, async (req, res) => {
 
         // Pass the fetched data to the view
         res.render('admin/dashboard', {
-            user: req.user, // User info from token
+            user: req.session.user, // User info from session
             pageTitle: 'Admin Dashboard',
             hotels,
             totalGuests,
             todayCheckIns,
-            recentGuests // Include recentGuests
+            recentGuests, // Include recentGuests
         });
     } catch (error) {
         console.error('Error fetching dashboard data:', error);
@@ -1715,10 +1736,9 @@ router.get('/dashboard', verifyToken, async (req, res) => {
 
 router.post('/hotels/:id/delete', adminController.deleteHotel);
 router.get('/hotels/:id/guests', adminController.getHotelGuests);
-router.get('/guests', guestController.getGuests);
+router.get('/guests', adminController.getGuests);
 router.get('/hotels', guestController.listHotels);
 router.post('/add-hotel', upload, adminController.addHotel);
-router.get('/guests', adminController.getGuests);
 
 // Route to view guest details
 router.get('/guests/:id', adminController.viewGuestDetails);
@@ -1738,6 +1758,7 @@ const express = require('express');
 const router = express.Router();
 const guestController = require('../controllers/guestController');
 const Hotel = require('../models/hotel');
+const { ensureGuestLoggedIn } = require('../middleware/authMiddleware');
 
 // Guest login and signup
 router.get('/', guestController.showLogin);
@@ -1773,8 +1794,6 @@ router.get('/form', async (req, res) => {
 });
 router.get('/form/:hotelId', guestController.showForm);
 router.post('/form/:hotelId', guestController.submitForm);
-
-router.get('/hotels', guestController.listHotels);
 router.get('/hotel/:id', guestController.hotelDetails);
 
 // Guest admin panel
@@ -1791,7 +1810,7 @@ router.get('/logout', (req, res) => {
         if (err) {
             console.error('Error destroying session:', err);
         }
-        res.redirect('/admin/login');
+        res.redirect('/guest/login'); // Redirect guests to guest login after logout
     });
 });
 
@@ -2055,31 +2074,20 @@ module.exports = generateQRCode;
                                 </tr>
                             </thead>
                             <tbody>
-                                <% hotels.forEach(hotel=> { %>
+                                <% hotels.forEach(hotel => { %>
                                     <tr>
+                                        <td><%= hotel.name %></td>
+                                        <td><%= hotel.address %></td>
+                                        <td><img src="/uploads/<%= hotel.logo %>" alt="Logo" style="height: 50px;"></td>
+                                        <td><img src="<%= hotel.qrCode %>" alt="QR Code" style="height: 50px;"></td>
                                         <td>
-                                            <%= hotel.name %>
-                                        </td>
-                                        <td>
-                                            <%= hotel.address %>
-                                        </td>
-                                        <td>
-                                            <img src="/uploads/<%= hotel.logo %>" alt="Logo" style="height: 50px;">
-                                        </td>
-                                        <td>
-                                            <img src="<%= hotel.qrCode %>" alt="QR Code" style="height: 50px;">
-                                        </td>
-                                        <td>
-                                            <a href="/admin/hotels/<%= hotel._id %>/guests"
-                                                class="btn btn-sm btn-info">View Guests</a>
-                                            <!-- Delete Button -->
-                                            <form action="/admin/hotels/<%= hotel._id %>/delete" method="POST"
-                                                style="display:inline;">
+                                            <a href="/admin/hotels/<%= hotel._id %>/guests" class="btn btn-sm btn-info">View Guests</a>
+                                            <form action="/admin/hotels/<%= hotel._id %>/delete" method="POST" style="display:inline;">
                                                 <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                                             </form>
                                         </td>
                                     </tr>
-                                    <% }) %>
+                                <% }) %>
                             </tbody>
                         </table>
                     </div>
@@ -2481,99 +2489,110 @@ module.exports = generateQRCode;
         <h2 class="text-center">Guest Signup</h2>
 
         <!-- Display Errors -->
-        <% if (errors && errors.length > 0) { %>
+        <% if (errors && errors.length> 0) { %>
             <div class="alert alert-danger">
                 <ul>
-                    <% errors.forEach(error => { %>
-                        <li><%= error.msg %></li>
-                    <% }) %>
+                    <% errors.forEach(error=> { %>
+                        <li>
+                            <%= error.msg %>
+                        </li>
+                        <% }) %>
                 </ul>
             </div>
-        <% } %>
+            <% } %>
 
-        <!-- Signup Form -->
-        <form action="/guest/signup" method="POST">
-            <!-- Username -->
-            <div class="mb-3">
-                <label for="username" class="form-label">Username</label>
-                <input type="text" id="username" name="username" class="form-control" required>
-            </div>
+                <!-- Signup Form -->
+                <form action="/guest/signup" method="POST">
+                    <!-- Username -->
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" id="username" name="username" class="form-control" required>
+                    </div>
 
-            <!-- Password -->
-            <div class="mb-3">
-                <label for="password" class="form-label">Password</label>
-                <input type="password" id="password" name="password" class="form-control" required>
-            </div>
+                    <!-- Password -->
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" id="password" name="password" class="form-control" required>
+                    </div>
 
-            <!-- Confirm Password -->
-            <div class="mb-3">
-                <label for="confirmPassword" class="form-label">Confirm Password</label>
-                <input type="password" id="confirmPassword" name="confirmPassword" class="form-control" required>
-            </div>
+                    <!-- Confirm Password -->
+                    <div class="mb-3">
+                        <label for="confirmPassword" class="form-label">Confirm Password</label>
+                        <input type="password" id="confirmPassword" name="confirmPassword" class="form-control"
+                            required>
+                    </div>
 
-            <!-- Select Hotel -->
-            <div class="mb-3">
-                <label for="hotelId" class="form-label">Select Hotel</label>
-                <select id="hotelId" name="hotelId" class="form-select" required>
-                    <% hotels.forEach(hotel => { %>
-                        <option value="<%= hotel._id %>"><%= hotel.name %> - <%= hotel.address %></option>
-                    <% }) %>
-                </select>
-            </div>
+                    <!-- Select Hotel -->
+                    <div class="mb-3">
+                        <label for="hotelId" class="form-label">Select Hotel</label>
+                        <select id="hotelId" name="hotelId" class="form-select" required>
+                            <% hotels.forEach(hotel=> { %>
+                                <option value="<%= hotel._id %>">
+                                    <%= hotel.name %> - <%= hotel.address %>
+                                </option>
+                                <% }) %>
+                        </select>
+                    </div>
 
-            <!-- Full Name -->
-            <div class="mb-3">
-                <label for="fullName" class="form-label">Full Name</label>
-                <input type="text" id="fullName" name="fullName" class="form-control" required>
-            </div>
+                    <!-- Full Name -->
+                    <div class="mb-3">
+                        <label for="fullName" class="form-label">Full Name</label>
+                        <input type="text" id="fullName" name="fullName" class="form-control" required>
+                    </div>
 
-            <!-- Mobile Number -->
-            <div class="mb-3">
-                <label for="mobileNumber" class="form-label">Mobile Number</label>
-                <input type="text" id="mobileNumber" name="mobileNumber" class="form-control" required>
-            </div>
+                    <!-- Mobile Number -->
+                    <div class="mb-3">
+                        <label for="mobileNumber" class="form-label">Mobile Number</label>
+                        <input type="text" id="mobileNumber" name="mobileNumber" class="form-control" required>
+                    </div>
 
-            <!-- Address -->
-            <div class="mb-3">
-                <label for="address" class="form-label">Address</label>
-                <textarea id="address" name="address" class="form-control" rows="3" required></textarea>
-            </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" id="email" name="email" class="form-control" required>
+                    </div>
 
-            <!-- Purpose of Visit -->
-            <div class="mb-3">
-                <label for="purpose" class="form-label">Purpose of Visit</label>
-                <select id="purpose" name="purpose" class="form-select" required>
-                    <option value="Business">Business</option>
-                    <option value="Personal">Personal</option>
-                    <option value="Tourist">Tourist</option>
-                </select>
-            </div>
 
-            <!-- Stay Dates -->
-            <div class="mb-3">
-                <label for="stayFrom" class="form-label">Stay From</label>
-                <input type="date" id="stayFrom" name="stayFrom" class="form-control" required>
-            </div>
+                    <!-- Address -->
+                    <div class="mb-3">
+                        <label for="address" class="form-label">Address</label>
+                        <textarea id="address" name="address" class="form-control" rows="3" required></textarea>
+                    </div>
 
-            <div class="mb-3">
-                <label for="stayTo" class="form-label">Stay To</label>
-                <input type="date" id="stayTo" name="stayTo" class="form-control" required>
-            </div>
+                    <!-- Purpose of Visit -->
+                    <div class="mb-3">
+                        <label for="purpose" class="form-label">Purpose of Visit</label>
+                        <select id="purpose" name="purpose" class="form-select" required>
+                            <option value="Business">Business</option>
+                            <option value="Personal">Personal</option>
+                            <option value="Tourist">Tourist</option>
+                        </select>
+                    </div>
 
-            <!-- ID Proof Number -->
-            <div class="mb-3">
-                <label for="idProofNumber" class="form-label">ID Proof Number</label>
-                <input type="text" id="idProofNumber" name="idProofNumber" class="form-control" required>
-            </div>
+                    <!-- Stay Dates -->
+                    <div class="mb-3">
+                        <label for="stayFrom" class="form-label">Stay From</label>
+                        <input type="date" id="stayFrom" name="stayFrom" class="form-control" required>
+                    </div>
 
-            <!-- Submit Button -->
-            <button type="submit" class="btn btn-primary w-100">Sign Up</button>
-        </form>
+                    <div class="mb-3">
+                        <label for="stayTo" class="form-label">Stay To</label>
+                        <input type="date" id="stayTo" name="stayTo" class="form-control" required>
+                    </div>
 
-        <!-- Login Link -->
-        <div class="text-center mt-3">
-            <a href="/guest/login">Already have an account? Login here</a>
-        </div>
+                    <!-- ID Proof Number -->
+                    <div class="mb-3">
+                        <label for="idProofNumber" class="form-label">ID Proof Number</label>
+                        <input type="text" id="idProofNumber" name="idProofNumber" class="form-control" required>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" class="btn btn-primary w-100">Sign Up</button>
+                </form>
+
+                <!-- Login Link -->
+                <div class="text-center mt-3">
+                    <a href="/guest/login">Already have an account? Login here</a>
+                </div>
     </div>
 </body>
 
@@ -2788,7 +2807,7 @@ module.exports = generateQRCode;
                                 href="<%= user.role === 'admin' ? '/admin/dashboard' : '/guest/admin/panel' %>">Home</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/logout">Logout</a>
+                            <a class="nav-link" href="<%= user.role === 'admin' ? '/admin/logout' : '/guest/logout' %>">Logout</a>
                         </li>
                     <% } else { %>
                         <li class="nav-item">

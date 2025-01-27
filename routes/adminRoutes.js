@@ -8,6 +8,7 @@ const Hotel = require('../models/hotel');
 const Guest = require('../models/guest');
 const { verifyToken } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
+const { ensureAdminLoggedIn } = require('../middleware/authMiddleware');
 
 // Public routes
 router.get('/login', (req, res) => {
@@ -18,11 +19,19 @@ router.get('/login', (req, res) => {
 });
 
 router.post('/login', authController.login);
-router.get('/logout', authController.logout);
+router.get('/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Error destroying session:', err);
+        }
+        res.redirect('/admin/login'); // Redirect admins to admin login after logout
+    });
+});
 
 // Protected routes
 router.use(verifyToken);
-router.get('/dashboard', verifyToken, async (req, res) => {
+
+router.get('/dashboard', async (req, res) => {
     try {
         // Fetch hotels from the database
         const hotels = await Hotel.find();
@@ -34,7 +43,7 @@ router.get('/dashboard', verifyToken, async (req, res) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0); // Set time to start of the day
         const todayCheckIns = await Guest.countDocuments({
-            'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) }
+            'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
         });
 
         // Fetch recent guests (limit to 10)
@@ -45,12 +54,12 @@ router.get('/dashboard', verifyToken, async (req, res) => {
 
         // Pass the fetched data to the view
         res.render('admin/dashboard', {
-            user: req.user, // User info from token
+            user: req.session.user, // User info from session
             pageTitle: 'Admin Dashboard',
             hotels,
             totalGuests,
             todayCheckIns,
-            recentGuests // Include recentGuests
+            recentGuests, // Include recentGuests
         });
     } catch (error) {
         console.error('Error fetching dashboard data:', error);
@@ -61,10 +70,9 @@ router.get('/dashboard', verifyToken, async (req, res) => {
 
 router.post('/hotels/:id/delete', adminController.deleteHotel);
 router.get('/hotels/:id/guests', adminController.getHotelGuests);
-router.get('/guests', guestController.getGuests);
+router.get('/guests', adminController.getGuests);
 router.get('/hotels', guestController.listHotels);
 router.post('/add-hotel', upload, adminController.addHotel);
-router.get('/guests', adminController.getGuests);
 
 // Route to view guest details
 router.get('/guests/:id', adminController.viewGuestDetails);
