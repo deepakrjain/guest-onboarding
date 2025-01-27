@@ -1,69 +1,20 @@
 const mongoose = require('mongoose'); // Import mongoose
 
 const guestSchema = new mongoose.Schema({
-    hotel: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Hotel',
-        required: true
-    },
-    fullName: {
-        type: String,
-        required: true,
-        trim: true
-    },
-    username: { 
-        type: String, 
-        unique: true, 
-        required: false // Changed to `false`
-    },
-    password: { 
-        type: String, 
-        required: false // Changed to `false`
-    },
-    mobileNumber: {
-        type: String,
-        required: true,
-        match: [/^[0-9]{10}$/, 'Please enter a valid 10-digit mobile number']
-    },
-    address: {
-        type: String,
-        required: true
-    },
-    purpose: {
-        type: String,
-        required: true,
-        enum: ['Business', 'Personal', 'Tourist']
-    },
+    username: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    fullName: { type: String, required: true },
+    mobileNumber: { type: String, required: true },
+    address: { type: String, required: true },
+    purpose: { type: String, required: true },
     stayDates: {
-        from: {
-            type: Date,
-            required: true
-        },
-        to: {
-            type: Date,
-            required: true
-        }
+        from: { type: Date, required: true },
+        to: { type: Date, required: true },
     },
-    email: {
-        type: String,
-        required: true,
-        match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
-    },
-    idProofNumber: {
-        type: String,
-        required: true,
-        unique: true,
-        trim: true,
-        minlength: 4,
-        maxlength: 20,
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    }
-}, {
-    timestamps: true
+    idProofNumber: { type: String, required: true, unique: true },
+    hotel: { type: mongoose.Schema.Types.ObjectId, ref: 'Hotel', required: true },
 });
+
 
 // Validation for stay dates
 guestSchema.pre('save', function (next) {

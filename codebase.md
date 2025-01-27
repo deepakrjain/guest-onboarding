@@ -42,6 +42,17 @@ app.use((req, res, next) => {
     next();
 });
 
+app.use((req, res, next) => {
+    if (req.session.guest) {
+        res.locals.user = { id: req.session.guest.id, role: 'guestAdmin' };
+    } else if (req.session.user) {
+        res.locals.user = { id: req.session.user.id, role: 'admin' };
+    } else {
+        res.locals.user = null;
+    }
+    next();
+});
+
 // Routes
 app.get('/', (req, res) => {
     res.render('index', { 
@@ -717,45 +728,33 @@ exports.showAdminPanel = async (req, res) => {
 
 // Guest signup
 exports.signup = async (req, res) => {
-    const { username, password, confirmPassword, hotelId } = req.body;
+    const { username, password, confirmPassword, hotelId, fullName, mobileNumber, address, purpose, stayFrom, stayTo, idProofNumber } = req.body;
 
     if (password !== confirmPassword) {
-        return res.render('guest/signup', { errors: [{ msg: 'Passwords do not match' }] });
+        return res.render('guest/signup', { errors: [{ msg: 'Passwords do not match' }], hotels: await Hotel.find() });
     }
 
     try {
         const existingGuest = await Guest.findOne({ username });
         if (existingGuest) {
-            return res.render('guest/signup', { errors: [{ msg: 'Username already taken' }] });
+            return res.render('guest/signup', { errors: [{ msg: 'Username already taken' }], hotels: await Hotel.find() });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Allow the user to select a hotel, or assign the first available hotel
-        const selectedHotel = hotelId || (await Hotel.findOne()); // If no hotelId, select the first hotel
-
-        if (!selectedHotel) {
-            return res.render('guest/signup', { 
-                errors: [{ msg: 'No hotels available for signup. Contact admin.' }] 
-            });
-        }
-
-        const uniqueIdProofNumber = `ID-${Date.now()}`;
-
         const newGuest = new Guest({
             username,
             password: hashedPassword,
-            fullName: 'Guest',
-            mobileNumber: '0000000000',
-            address: 'N/A',
-            purpose: 'Personal',
+            fullName,
+            mobileNumber,
+            address,
+            purpose,
             stayDates: {
-                from: new Date(),
-                to: new Date(),
+                from: new Date(stayFrom),
+                to: new Date(stayTo),
             },
-            email: `${username}@example.com`,
-            idProofNumber: uniqueIdProofNumber,
-            hotel: selectedHotel._id, // Use the selected or default hotel
+            idProofNumber,
+            hotel: hotelId,
         });
 
         await newGuest.save();
@@ -763,9 +762,7 @@ exports.signup = async (req, res) => {
         res.redirect('/guest/login');
     } catch (error) {
         console.error('Signup error:', error);
-        res.status(500).render('guest/signup', { 
-            errors: [{ msg: 'Internal server error. Please try again.' }] 
-        });
+        res.status(500).render('guest/signup', { errors: [{ msg: 'Internal server error' }], hotels: await Hotel.find() });
     }
 };
 
@@ -940,11 +937,19 @@ exports.submitForm = async (req, res) => {
 };
 
 
-
-
-exports.showSignup = (req, res) => {
-    res.render('guest/signup', { errors: [] });
+exports.showSignup = async (req, res) => {
+    try {
+        const hotels = await Hotel.find(); // Fetch hotels from the database
+        res.render('guest/signup', { errors: [], hotels }); // Pass hotels to the view
+    } catch (error) {
+        console.error('Error fetching hotels:', error.message);
+        res.status(500).render('guest/signup', {
+            errors: [{ msg: 'An error occurred while loading the signup page.' }],
+            hotels: [],
+        });
+    }
 };
+
 
 
 exports.showLogin = (req, res) => {
@@ -1184,69 +1189,20 @@ module.exports = mongoose.model('User', adminSchema);
 const mongoose = require('mongoose'); // Import mongoose
 
 const guestSchema = new mongoose.Schema({
-    hotel: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Hotel',
-        required: true
-    },
-    fullName: {
-        type: String,
-        required: true,
-        trim: true
-    },
-    username: { 
-        type: String, 
-        unique: true, 
-        required: false // Changed to `false`
-    },
-    password: { 
-        type: String, 
-        required: false // Changed to `false`
-    },
-    mobileNumber: {
-        type: String,
-        required: true,
-        match: [/^[0-9]{10}$/, 'Please enter a valid 10-digit mobile number']
-    },
-    address: {
-        type: String,
-        required: true
-    },
-    purpose: {
-        type: String,
-        required: true,
-        enum: ['Business', 'Personal', 'Tourist']
-    },
+    username: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    fullName: { type: String, required: true },
+    mobileNumber: { type: String, required: true },
+    address: { type: String, required: true },
+    purpose: { type: String, required: true },
     stayDates: {
-        from: {
-            type: Date,
-            required: true
-        },
-        to: {
-            type: Date,
-            required: true
-        }
+        from: { type: Date, required: true },
+        to: { type: Date, required: true },
     },
-    email: {
-        type: String,
-        required: true,
-        match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
-    },
-    idProofNumber: {
-        type: String,
-        required: true,
-        unique: true,
-        trim: true,
-        minlength: 4,
-        maxlength: 20,
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    }
-}, {
-    timestamps: true
+    idProofNumber: { type: String, required: true, unique: true },
+    hotel: { type: mongoose.Schema.Types.ObjectId, ref: 'Hotel', required: true },
 });
+
 
 // Validation for stay dates
 guestSchema.pre('save', function (next) {
@@ -1834,11 +1790,11 @@ router.get('/logout', (req, res) => {
     req.session.destroy((err) => {
         if (err) {
             console.error('Error destroying session:', err);
-            return res.status(500).redirect('/guest/hotels');
         }
-        res.redirect('/guest/login');
+        res.redirect('/admin/login');
     });
 });
+
 
 router.get('/admin/panel', guestController.showAdminPanel);
 
@@ -2512,44 +2468,115 @@ module.exports = generateQRCode;
 ```ejs
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Guest Signup</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
+
 <body>
     <div class="container mt-5">
         <h2 class="text-center">Guest Signup</h2>
+
+        <!-- Display Errors -->
         <% if (errors && errors.length > 0) { %>
             <div class="alert alert-danger">
                 <ul>
                     <% errors.forEach(error => { %>
                         <li><%= error.msg %></li>
-                    <% }); %>
+                    <% }) %>
                 </ul>
             </div>
         <% } %>
+
+        <!-- Signup Form -->
         <form action="/guest/signup" method="POST">
+            <!-- Username -->
             <div class="mb-3">
                 <label for="username" class="form-label">Username</label>
                 <input type="text" id="username" name="username" class="form-control" required>
             </div>
+
+            <!-- Password -->
             <div class="mb-3">
                 <label for="password" class="form-label">Password</label>
                 <input type="password" id="password" name="password" class="form-control" required>
             </div>
+
+            <!-- Confirm Password -->
             <div class="mb-3">
                 <label for="confirmPassword" class="form-label">Confirm Password</label>
                 <input type="password" id="confirmPassword" name="confirmPassword" class="form-control" required>
             </div>
+
+            <!-- Select Hotel -->
+            <div class="mb-3">
+                <label for="hotelId" class="form-label">Select Hotel</label>
+                <select id="hotelId" name="hotelId" class="form-select" required>
+                    <% hotels.forEach(hotel => { %>
+                        <option value="<%= hotel._id %>"><%= hotel.name %> - <%= hotel.address %></option>
+                    <% }) %>
+                </select>
+            </div>
+
+            <!-- Full Name -->
+            <div class="mb-3">
+                <label for="fullName" class="form-label">Full Name</label>
+                <input type="text" id="fullName" name="fullName" class="form-control" required>
+            </div>
+
+            <!-- Mobile Number -->
+            <div class="mb-3">
+                <label for="mobileNumber" class="form-label">Mobile Number</label>
+                <input type="text" id="mobileNumber" name="mobileNumber" class="form-control" required>
+            </div>
+
+            <!-- Address -->
+            <div class="mb-3">
+                <label for="address" class="form-label">Address</label>
+                <textarea id="address" name="address" class="form-control" rows="3" required></textarea>
+            </div>
+
+            <!-- Purpose of Visit -->
+            <div class="mb-3">
+                <label for="purpose" class="form-label">Purpose of Visit</label>
+                <select id="purpose" name="purpose" class="form-select" required>
+                    <option value="Business">Business</option>
+                    <option value="Personal">Personal</option>
+                    <option value="Tourist">Tourist</option>
+                </select>
+            </div>
+
+            <!-- Stay Dates -->
+            <div class="mb-3">
+                <label for="stayFrom" class="form-label">Stay From</label>
+                <input type="date" id="stayFrom" name="stayFrom" class="form-control" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="stayTo" class="form-label">Stay To</label>
+                <input type="date" id="stayTo" name="stayTo" class="form-control" required>
+            </div>
+
+            <!-- ID Proof Number -->
+            <div class="mb-3">
+                <label for="idProofNumber" class="form-label">ID Proof Number</label>
+                <input type="text" id="idProofNumber" name="idProofNumber" class="form-control" required>
+            </div>
+
+            <!-- Submit Button -->
             <button type="submit" class="btn btn-primary w-100">Sign Up</button>
         </form>
+
+        <!-- Login Link -->
         <div class="text-center mt-3">
             <a href="/guest/login">Already have an account? Login here</a>
         </div>
     </div>
 </body>
+
 </html>
 ```
 
@@ -2653,6 +2680,7 @@ module.exports = generateQRCode;
 ```ejs
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2664,35 +2692,115 @@ module.exports = generateQRCode;
         body {
             background-color: #f8f9fa;
         }
+
         .navbar {
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+
+        .feature-section {
+            background-color: #ffffff;
+            padding: 50px 20px;
+            margin-top: 50px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .feature-section h2 {
+            text-align: center;
+            margin-bottom: 40px;
+            font-weight: bold;
+        }
+
+        .feature-item {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .feature-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .feature-item .icon {
+            font-size: 2.5rem;
+            color: #007bff;
+            margin-bottom: 15px;
+        }
+
+        .cta-section {
+            background: linear-gradient(45deg, #007bff, #6610f2);
+            color: #ffffff;
+            text-align: center;
+            padding: 50px 20px;
+            border-radius: 10px;
+            margin-top: 50px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .cta-section h2 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        .cta-section p {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+        }
+
+        .cta-section .btn {
+            padding: 15px 30px;
+            font-size: 1rem;
+            border-radius: 50px;
+        }
+
         footer {
             background-color: #343a40;
             color: #fff;
             padding: 15px 0;
         }
+
         footer a {
             color: #adb5bd;
             text-decoration: none;
         }
+
         footer a:hover {
             color: #fff;
         }
     </style>
 </head>
+
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="/"><i class="fas fa-hotel"></i> Guest Onboarding</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Guest Onboarding</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item"><a class="nav-link" href="/">Home</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/guest/form">Guest Registration</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/login">Admin Login</a></li>
+                    <% if (user) { %>
+                        <li class="nav-item">
+                            <a class="nav-link"
+                                href="<%= user.role === 'admin' ? '/admin/dashboard' : '/guest/admin/panel' %>">Home</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/logout">Logout</a>
+                        </li>
+                    <% } else { %>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/guest/login">Guest Login</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/guest/signup">Guest Signup</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/admin/login">Admin Login</a>
+                        </li>
+                    <% } %>
                 </ul>
             </div>
         </div>
@@ -2700,6 +2808,40 @@ module.exports = generateQRCode;
 
     <div class="container mt-5">
         <%- body %>
+    </div>
+
+    <div class="container feature-section">
+        <h2>What We Offer</h2>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="feature-item text-center">
+                    <div class="icon"><i class="fas fa-user-check"></i></div>
+                    <h4>Effortless Registration</h4>
+                    <p>Register with ease, and start your journey without the hassle of paperwork.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-item text-center">
+                    <div class="icon"><i class="fas fa-lock"></i></div>
+                    <h4>Secure Login</h4>
+                    <p>Your personal data is always safe with our advanced security measures.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-item text-center">
+                    <div class="icon"><i class="fas fa-concierge-bell"></i></div>
+                    <h4>24/7 Support</h4>
+                    <p>Our team is available round-the-clock to assist with any concerns or needs.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="cta-section">
+        <h2>Ready to Get Started?</h2>
+        <p>Join our digital guest onboarding system and experience hassle-free registration and management.</p>
+        <a href="/guest/signup" class="btn btn-lg btn-light">Sign Up Now</a>
+        <a href="/guest/login" class="btn btn-lg btn-dark">Login</a>
     </div>
 
     <footer class="text-center mt-5">
@@ -2713,6 +2855,7 @@ module.exports = generateQRCode;
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
+
 </html>
 ```
 

@@ -55,31 +55,20 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <% hotels.forEach(hotel=> { %>
+                                <% hotels.forEach(hotel => { %>
                                     <tr>
+                                        <td><%= hotel.name %></td>
+                                        <td><%= hotel.address %></td>
+                                        <td><img src="/uploads/<%= hotel.logo %>" alt="Logo" style="height: 50px;"></td>
+                                        <td><img src="<%= hotel.qrCode %>" alt="QR Code" style="height: 50px;"></td>
                                         <td>
-                                            <%= hotel.name %>
-                                        </td>
-                                        <td>
-                                            <%= hotel.address %>
-                                        </td>
-                                        <td>
-                                            <img src="/uploads/<%= hotel.logo %>" alt="Logo" style="height: 50px;">
-                                        </td>
-                                        <td>
-                                            <img src="<%= hotel.qrCode %>" alt="QR Code" style="height: 50px;">
-                                        </td>
-                                        <td>
-                                            <a href="/admin/hotels/<%= hotel._id %>/guests"
-                                                class="btn btn-sm btn-info">View Guests</a>
-                                            <!-- Delete Button -->
-                                            <form action="/admin/hotels/<%= hotel._id %>/delete" method="POST"
-                                                style="display:inline;">
+                                            <a href="/admin/hotels/<%= hotel._id %>/guests" class="btn btn-sm btn-info">View Guests</a>
+                                            <form action="/admin/hotels/<%= hotel._id %>/delete" method="POST" style="display:inline;">
                                                 <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                                             </form>
                                         </td>
                                     </tr>
-                                    <% }) %>
+                                <% }) %>
                             </tbody>
                         </table>
                     </div>

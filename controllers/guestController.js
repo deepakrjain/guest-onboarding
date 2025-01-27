@@ -39,7 +39,7 @@ exports.listHotels = async (req, res) => {
 
         // Check if there are any hotels available
         if (!hotels.length) {
-            return res.status(404).render('guest/hotelList', {
+            return res.status(404).render('admin/hotels', {
                 pageTitle: 'No Hotels Available',
                 hotels: [], // Pass an empty array
                 error: 'No hotels are available at the moment.', // Display error message
@@ -47,7 +47,7 @@ exports.listHotels = async (req, res) => {
         }
 
         // Render the hotelList.ejs view with the list of hotels
-        res.render('guest/hotelList', {
+        res.render('admin/hotels', {
             pageTitle: 'Available Hotels',
             hotels, // Pass the list of hotels
             error: null, // No errors
@@ -56,7 +56,7 @@ exports.listHotels = async (req, res) => {
         console.error('Error fetching hotels:', error);
 
         // Handle any server errors
-        res.status(500).render('guest/hotelList', {
+        res.status(500).render('admin/hotels', {
             pageTitle: 'Error',
             hotels: [], // Pass an empty array
             error: 'An error occurred while fetching the list of hotels.',
@@ -185,59 +185,48 @@ exports.showAdminPanel = async (req, res) => {
 };
 
 
-// Guest signup
 exports.signup = async (req, res) => {
-    const { username, password, confirmPassword, hotelId } = req.body;
+    const { username, password, confirmPassword, hotelId, fullName, mobileNumber, email, address, purpose, stayFrom, stayTo, idProofNumber } = req.body;
 
     if (password !== confirmPassword) {
-        return res.render('guest/signup', { errors: [{ msg: 'Passwords do not match' }] });
+        return res.render('guest/signup', { errors: [{ msg: 'Passwords do not match' }], hotels: await Hotel.find() });
     }
 
     try {
-        const existingGuest = await Guest.findOne({ username });
+        const existingGuest = await Guest.findOne({ idProofNumber });
         if (existingGuest) {
-            return res.render('guest/signup', { errors: [{ msg: 'Username already taken' }] });
+            return res.render('guest/signup', {
+                errors: [{ msg: `Guest with ID proof number ${idProofNumber} already exists.` }],
+                hotels: await Hotel.find(),
+            });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Allow the user to select a hotel, or assign the first available hotel
-        const selectedHotel = hotelId || (await Hotel.findOne()); // If no hotelId, select the first hotel
-
-        if (!selectedHotel) {
-            return res.render('guest/signup', { 
-                errors: [{ msg: 'No hotels available for signup. Contact admin.' }] 
-            });
-        }
-
-        const uniqueIdProofNumber = `ID-${Date.now()}`;
-
         const newGuest = new Guest({
             username,
             password: hashedPassword,
-            fullName: 'Guest',
-            mobileNumber: '0000000000',
-            address: 'N/A',
-            purpose: 'Personal',
+            fullName,
+            mobileNumber,
+            email,
+            address,
+            purpose,
             stayDates: {
-                from: new Date(),
-                to: new Date(),
+                from: new Date(stayFrom),
+                to: new Date(stayTo),
             },
-            email: `${username}@example.com`,
-            idProofNumber: uniqueIdProofNumber,
-            hotel: selectedHotel._id, // Use the selected or default hotel
+            idProofNumber,
+            hotel: hotelId,
         });
 
         await newGuest.save();
-
         res.redirect('/guest/login');
     } catch (error) {
         console.error('Signup error:', error);
-        res.status(500).render('guest/signup', { 
-            errors: [{ msg: 'Internal server error. Please try again.' }] 
-        });
+        res.status(500).render('guest/signup', { errors: [{ msg: 'Internal server error' }], hotels: await Hotel.find() });
     }
 };
+
 
 
 exports.getGuests = async (req, res) => {
@@ -410,11 +399,19 @@ exports.submitForm = async (req, res) => {
 };
 
 
-
-
-exports.showSignup = (req, res) => {
-    res.render('guest/signup', { errors: [] });
+exports.showSignup = async (req, res) => {
+    try {
+        const hotels = await Hotel.find(); // Fetch hotels from the database
+        res.render('guest/signup', { errors: [], hotels }); // Pass hotels to the view
+    } catch (error) {
+        console.error('Error fetching hotels:', error.message);
+        res.status(500).render('guest/signup', {
+            errors: [{ msg: 'An error occurred while loading the signup page.' }],
+            hotels: [],
+        });
+    }
 };
+
 
 
 exports.showLogin = (req, res) => {
