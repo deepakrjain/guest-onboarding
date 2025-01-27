@@ -78,13 +78,13 @@ app.use((req, res) => {
     });
 });
 
-// initialize database and start server
+const PORT = process.env.PORT || 3000;
+
 const startServer = async () => {
     try {
         await connectDB();
-        const PORT = process.env.PORT || 3000;
         app.listen(PORT, () => {
-            console.log(`Server running on http://localhost:${PORT}`);
+            console.log(`Server running on port ${PORT}`);
         });
     } catch (error) {
         console.error('Failed to start server:', error);

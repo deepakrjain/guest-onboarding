@@ -20,7 +20,6 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
-// View Engine Setup
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(expressLayouts);
@@ -28,10 +27,12 @@ app.set('layout', 'layout');
 
 // Session Configuration
 app.use(session({
-    secret: '1067', // Replace with a strong secret key
+    secret: '1067',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false },
+    cookie: { 
+        secure: process.env.NODE_ENV === 'production', // Secure in production
+    }
 }));
 
 // Global Middleware
@@ -80,7 +81,7 @@ app.use((req, res) => {
     });
 });
 
-// Initialize Database and Start Server
+// initialize database and start server
 const startServer = async () => {
     try {
         await connectDB();
@@ -114,7 +115,7 @@ const connectDB = async () => {
         console.log('MongoDB connected successfully!');
     } catch (err) {
         console.error('MongoDB connection error:', err.message);
-        process.exit(1); // Exit with failure
+        process.exit(1);
     }
 };
 
@@ -644,31 +645,26 @@ exports.showForm = async (req, res) => {
 exports.login = async (req, res) => {
     const { username, password } = req.body;
     try {
-        // Find the guest by username
         const guest = await Guest.findOne({ username }).populate('hotel');
         if (!guest) {
             return res.render('guest/login', { error: 'Invalid username or password' });
         }
 
-        // Verify the password
         const isMatch = await bcrypt.compare(password, guest.password);
         if (!isMatch) {
             return res.render('guest/login', { error: 'Invalid username or password' });
         }
 
-        // Ensure the guest has an associated hotel
         if (!guest.hotel) {
             return res.render('guest/login', { error: 'No associated hotel found. Contact admin.' });
         }
 
-        // Store guest and hotel information in the session
         req.session.guest = {
             id: guest._id,
             username: guest.username,
-            hotelId: guest.hotel._id, // Save the associated hotel's ID
+            hotelId: guest.hotel._id,
         };
 
-        // Redirect to the guest admin panel
         res.redirect('/guest/admin/panel');
     } catch (error) {
         console.error('Login error:', error);
@@ -700,7 +696,7 @@ exports.showAdminPanel = async (req, res) => {
         }
 
         const hotel = guest.hotel;
-        const guests = await Guest.find({ hotel: hotel._id });
+        const guests = await Guest.find({ _id: guestId });
 
         res.render('guest/adminPanel', {
             pageTitle: `Guest Admin Panel - ${hotel.name}`,
@@ -766,7 +762,7 @@ exports.signup = async (req, res) => {
 
 exports.getGuests = async (req, res) => {
     try {
-        const hotelId = req.params.hotelId; // Fetch hotel ID
+        const hotelId = req.params.hotelId;
         const guests = await Guest.find({ hotel: hotelId });
         const hotel = await Hotel.findById(hotelId);
 
@@ -787,7 +783,7 @@ exports.getGuests = async (req, res) => {
 
 exports.viewGuestDetails = async (req, res) => {
     try {
-        const guest = await Guest.findById(req.params.guestId).populate('hotel'); // Fetch guest and hotel details
+        const guest = await Guest.findById(req.params.guestId).populate('hotel');
         if (!guest) {
             return res.status(404).render('guest/adminPanel', {
                 pageTitle: 'Guest Not Found',
@@ -797,7 +793,6 @@ exports.viewGuestDetails = async (req, res) => {
             });
         }
 
-        // Render the guest details view
         res.render('guest/viewGuest', {
             pageTitle: `Guest Details - ${guest.fullName}`,
             guest,
@@ -841,7 +836,6 @@ exports.editGuest = async (req, res) => {
     try {
         const { fullName, mobileNumber, purpose, stayDates, email } = req.body;
         
-        // Ensure stayDates is correctly parsed into Date objects
         const updatedStayDates = {
             from: new Date(stayDates.from),
             to: new Date(stayDates.to),
@@ -862,7 +856,6 @@ exports.editGuest = async (req, res) => {
             });
         }
 
-        // Redirect to the admin panel after successful update
         res.redirect('/guest/admin/panel');
     } catch (error) {
         console.error('Error editing guest:', error);
@@ -894,7 +887,6 @@ exports.submitForm = async (req, res) => {
 
         const { fullName, mobileNumber, email, address, purpose, stayDates, idProofNumber } = req.body;
 
-        // Check for duplicate key error (username, idProofNumber)
         const username = `guest_${Date.now()}`;
         const existingGuest = await Guest.findOne({ idProofNumber });
         if (existingGuest) {
@@ -936,8 +928,8 @@ exports.submitForm = async (req, res) => {
 
 exports.showSignup = async (req, res) => {
     try {
-        const hotels = await Hotel.find(); // Fetch hotels from the database
-        res.render('guest/signup', { errors: [], hotels }); // Pass hotels to the view
+        const hotels = await Hotel.find();
+        res.render('guest/signup', { errors: [], hotels });
     } catch (error) {
         console.error('Error fetching hotels:', error.message);
         res.status(500).render('guest/signup', {
@@ -1826,11 +1818,11 @@ module.exports = router;
 const QRCode = require('qrcode');
 
 exports.generateQRCode = async (hotelId) => {
-    const baseUrl = 'http://192.168.29.1:3000'; // Replace with your LAN IP for testing on mobile
-    const hotelUrl = `${baseUrl}/guest/hotel/${hotelId}`; // Hotel landing page
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000'; // Dynamic base URL
+    const hotelUrl = `${baseUrl}/guest/hotel/${hotelId}`;
     try {
         const qrCode = await QRCode.toDataURL(hotelUrl);
-        return qrCode; // Return base64 QR code string
+        return qrCode;
     } catch (error) {
         console.error('Error generating QR code:', error);
         throw error;
@@ -1838,6 +1830,27 @@ exports.generateQRCode = async (hotelId) => {
 };
 
 module.exports = generateQRCode;
+```
+
+# vercel.json
+
+```json
+{
+    "version": 2,
+    "builds": [
+      {
+        "src": "app.js",
+        "use": "@vercel/node"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/(.*)",
+        "dest": "app.js",
+        "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+      }
+    ]
+  }  
 ```
 
 # views\admin\dashboard.ejs
@@ -2215,6 +2228,7 @@ module.exports = generateQRCode;
                                             <th>Mobile</th>
                                             <th>Purpose</th>
                                             <th>Stay Dates</th>
+                                            <th>Hotel</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -2231,9 +2245,13 @@ module.exports = generateQRCode;
                                                     <%= guest.purpose %>
                                                 </td>
                                                 <td>
+                                                    <%= guest.hotel?.name || 'N/A' %>
+                                                </td>
+                                                <td>
                                                     <%= guest.stayDates.from.toLocaleDateString() %> - <%=
                                                             guest.stayDates.to.toLocaleDateString() %>
                                                 </td>
+
                                                 <td>
                                                     <a href="/guest/admin/edit-guest/<%= guest._id %>"
                                                         class="btn btn-sm btn-warning">Edit</a>
@@ -2241,16 +2259,16 @@ module.exports = generateQRCode;
                                                         class="btn btn-sm btn-info">View</a>
                                                 </td>
                                             </tr>
-                                            <% }) %>    
+                                            <% }) %>
                                     </tbody>
                                 </table>
                             </div>
                             <% } else { %>
                                 <div class="alert alert-info mt-4">No guests found for this hotel.</div>
                                 <% } %>
-                                <div class="mt-4">
-                                    <a href="/guest/hotels" class="btn btn-primary">View Available Hotels</a>
-                                </div>
+                                    <div class="mt-4">
+                                        <a href="/guest/hotels" class="btn btn-primary">View Available Hotels</a>
+                                    </div>
 </div>
 ```
 
