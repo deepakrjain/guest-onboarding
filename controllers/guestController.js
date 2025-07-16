@@ -1,4 +1,4 @@
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const Guest = require('../models/guest');
 const Hotel = require('../models/hotel');
 const { validationResult } = require('express-validator');

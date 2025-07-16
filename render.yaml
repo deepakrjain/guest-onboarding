@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: guest-onboarding-app
+    env: node
+    buildCommand: "npm install"
+    startCommand: "node app.js"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        value: mongodb+srv://deepakrjain7:rogerthat@guest-onboarding-mongod.xk6md.mongodb.net/guest-onboarding-mongod?retryWrites=true&w=majority&appName=guest-onboarding-mongodb
+      - key: JWT_SECRET
+        value: 1067
+    plan: free
+    autoDeploy: true
