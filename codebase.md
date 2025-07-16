@@ -1,3 +1,21 @@
+# render.yaml
+```
+services:
+  - type: web
+    name: guest-onboarding-app
+    env: node
+    buildCommand: "npm install"
+    startCommand: "node app.js"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        value: mongodb+srv://deepakrjain7:rogerthat@guest-onboarding-mongod.xk6md.mongodb.net/guest-onboarding-mongod?retryWrites=true&w=majority&appName=guest-onboarding-mongodb
+      - key: JWT_SECRET
+        value: 1067
+    plan: free
+    autoDeploy: true
+```
 # app.js
 
 ```js
@@ -111,7 +129,10 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
     try {
-        await mongoose.connect("mongodb://localhost:27017/guestOnboarding");
+        await mongoose.connect(process.env.MONGO_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true
+        });
         console.log('MongoDB connected successfully!');
     } catch (err) {
         console.error('MongoDB connection error:', err.message);
@@ -540,7 +561,7 @@ exports.logout = (req, res) => {
 # controllers\guestController.js
 
 ```js
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const Guest = require('../models/guest');
 const Hotel = require('../models/hotel');
 const { validationResult } = require('express-validator');
@@ -1251,7 +1272,6 @@ module.exports = mongoose.model('Hotel', HotelSchema);
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.3",
     "cookie-parser": "^1.4.7",
