@@ -1,9 +1,19 @@
 <div class="text-center">
     <h1 class="display-4 fw-bold mt-5 text-primary">Welcome to the Digital Guest Onboarding System</h1>
     <p class="lead mt-3 text-muted">Seamless registration and management for guests and administrators.</p>
-    
-    <% if (message) { %>
-        <div class="alert alert-danger w-50 mx-auto"><%= message %></div>
+
+    <% // Display error messages %>
+    <% if (error) { %>
+        <div class="alert alert-danger w-50 mx-auto">
+            <%= error %>
+        </div>
+    <% } %>
+
+    <% // Display success messages %>
+    <% if (success) { %>
+        <div class="alert alert-success w-50 mx-auto">
+            <%= success %>
+        </div>
     <% } %>
 
     <div class="mt-5">
