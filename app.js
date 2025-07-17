@@ -6,7 +6,7 @@ const path = require('path');
 const expressLayouts = require('express-ejs-layouts');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
-const MongoStore = require('connect-mongo'); // <--- NEW: Import connect-mongo
+const MongoStore = require('connect-mongo');
 const app = express();
 const connectDB = require('./config/db');
 
@@ -23,49 +23,49 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(expressLayouts);
 app.set('layout', 'layout');
 
-// <--- NEW: Trust the proxy (essential for Render)
-app.set('trust proxy', 1); // Trust first proxy (Render's proxy)
+// Trust the proxy (essential for Render)
+app.set('trust proxy', 1);
 
 // Session Configuration
 app.use(session({
     secret: process.env.JWT_SECRET || 'a_very_secret_key_for_session',
     resave: false,
     saveUninitialized: false,
-    store: MongoStore.create({ // <--- NEW: Use MongoStore
+    store: MongoStore.create({
         mongoUrl: process.env.MONGODB_URI,
-        collectionName: 'sessions', // Optional: specify a collection name for sessions
+        collectionName: 'sessions',
         ttl: 14 * 24 * 60 * 60, // Session TTL in seconds (14 days)
         autoRemove: 'interval',
-        autoRemoveInterval: 10 // In minutes. Removes expired sessions every 10 minutes
+        autoRemoveInterval: 10 // In minutes
     }),
     cookie: {
-        secure: process.env.NODE_ENV === 'production', // Must be true in production (HTTPS)
-        httpOnly: true, // Prevent client-side JS from reading the cookie
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
-        sameSite: 'lax' // Recommended for security and cross-site requests
+        sameSite: 'lax'
     }
 }));
 
 // Global Middleware to make user and messages available in EJS
 app.use((req, res, next) => {
-    res.locals.user = null;
+    res.locals.user = null; // Default to null
+    // Assign flash messages to res.locals for the current request
     res.locals.error = req.session.error || null;
     res.locals.success = req.session.success || null;
+
+    // Clear flash messages *after* they've been assigned to res.locals for the current request.
+    // This makes them 'flash' - available for one request then cleared.
+    delete req.session.error;
+    delete req.session.success;
+
+    // Set res.locals.user based on session for EJS templates
+    if (req.session.guest) {
+        res.locals.user = { id: req.session.guest.id, role: 'guestAdmin' };
+    } else if (req.session.user) {
+        res.locals.user = { id: req.session.user.id, role: req.session.user.role };
+    }
     next();
 });
-
-// This block is redundant and can be removed as res.locals.user is set above
-// and req.session.guest/user are checked by auth middleware.
-// app.use((req, res, next) => {
-//     if (req.session.guest) {
-//         res.locals.user = { id: req.session.guest.id, role: 'guestAdmin' };
-//     } else if (req.session.user) {
-//         res.locals.user = { id: req.session.user.id, role: req.session.user.role };
-//     } else {
-//         res.locals.user = null;
-//     }
-//     next();
-// });
 
 // Routes
 app.get('/', (req, res) => {
@@ -77,7 +77,8 @@ app.get('/', (req, res) => {
     }
     res.render('index', {
         pageTitle: 'Digital Guest Onboarding System',
-        message: res.locals.error || res.locals.success || null
+        // Messages are now passed via res.locals by the global middleware
+        // so 'message' here is not strictly needed for flash messages
     });
 });
 app.use('/guest', require('./routes/guestRoutes'));
@@ -86,14 +87,15 @@ app.use('/admin', require('./routes/adminRoutes'));
 // Error Handling Middleware (catch-all for unhandled errors)
 app.use((err, req, res, next) => {
     console.error('Application Error:', err.stack || err.message || err);
+    // Store error in session. It will be flashed on the next request.
     req.session.error = err.message || 'An unexpected error occurred.';
-    res.status(err.status || 500).redirect('/');
+    res.status(err.status || 500).redirect('/'); // Redirect to home page
 });
 
 // 404 Handler (for routes not found)
 app.use((req, res) => {
-    req.session.error = 'Page not found.';
-    res.status(404).redirect('/');
+    req.session.error = 'The page you are looking for was not found.'; // Set clear 404 message
+    res.status(404).redirect('/'); // Redirect to home with a flashed 404 message
 });
 
 const PORT = process.env.PORT || 3000;

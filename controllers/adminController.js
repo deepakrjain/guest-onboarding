@@ -102,32 +102,29 @@ exports.guestDashboard = async (req, res) => {
 exports.addHotel = async (req, res) => {
     try {
         const { name, address, description } = req.body;
+        // ... file uploads ...
 
-        // Handle file uploads
-        const logo = req.files['logo'] ? req.files['logo'][0].filename : null;
-        const photos = req.files['photos'] ? req.files['photos'].map(file => file.filename) : [];
-
-        if (!logo || photos.length < 3) {
-            return res.render('admin/hotels', { 
-                error: 'Logo and at least 3 photos are required.', 
-                hotels: await Hotel.find() 
-            });
-        }
-
-        // Generate QR code for hotel
-        const qrCodeUrl = `${process.env.BASE_URL}/guest/hotel/${name}`;
-        const qrCode = await QRCode.toDataURL(qrCodeUrl);
-
-        // Save hotel to the database
-        const newHotel = new Hotel({ name, address, description, logo, photos, qrCode });
+        const newHotel = new Hotel({ name, address, description, logo, photos });
         await newHotel.save();
 
+        // Generate QR code for hotel using its unique ID
+        // Ensure process.env.BASE_URL is loaded and available
+        const qrCodeUrl = `${process.env.BASE_URL}/guest/form/${newHotel._id}`; // This line
+        const qrCodeDataUrl = await QRCode.toDataURL(qrCodeUrl);
+
+        newHotel.qrCode = qrCodeDataUrl;
+        await newHotel.save();
+
+        req.session.success = 'Hotel added successfully! 🎉'; // Added for consistency
         res.redirect('/admin/hotels');
     } catch (error) {
         console.error('Error adding hotel:', error);
-        res.status(500).render('admin/hotels', { 
-            error: 'Failed to add hotel.', 
-            hotels: await Hotel.find() 
+        const hotels = await Hotel.find(); // Fetch hotels for error rendering
+        req.session.error = 'Failed to add hotel. An internal error occurred. 🛠️'; // Added for consistency
+        res.status(500).render('admin/hotels', {
+            pageTitle: 'Manage Hotels',
+            hotels: hotels,
+            error: req.session.error
         });
     }
 };
