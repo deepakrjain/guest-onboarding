@@ -6,6 +6,7 @@ const path = require('path');
 const expressLayouts = require('express-ejs-layouts');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
+const MongoStore = require('connect-mongo'); // <--- NEW: Import connect-mongo
 const app = express();
 const connectDB = require('./config/db');
 
@@ -22,56 +23,61 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(expressLayouts);
 app.set('layout', 'layout');
 
+// <--- NEW: Trust the proxy (essential for Render)
+app.set('trust proxy', 1); // Trust first proxy (Render's proxy)
+
 // Session Configuration
 app.use(session({
-    secret: process.env.JWT_SECRET || 'a_very_secret_key_for_session', // <--- IMPORTANT: Use process.env.JWT_SECRET
+    secret: process.env.JWT_SECRET || 'a_very_secret_key_for_session',
     resave: false,
     saveUninitialized: false,
+    store: MongoStore.create({ // <--- NEW: Use MongoStore
+        mongoUrl: process.env.MONGODB_URI,
+        collectionName: 'sessions', // Optional: specify a collection name for sessions
+        ttl: 14 * 24 * 60 * 60, // Session TTL in seconds (14 days)
+        autoRemove: 'interval',
+        autoRemoveInterval: 10 // In minutes. Removes expired sessions every 10 minutes
+    }),
     cookie: {
-        secure: process.env.NODE_ENV === 'production', // Secure in production
+        secure: process.env.NODE_ENV === 'production', // Must be true in production (HTTPS)
         httpOnly: true, // Prevent client-side JS from reading the cookie
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+        sameSite: 'lax' // Recommended for security and cross-site requests
     }
 }));
 
 // Global Middleware to make user and messages available in EJS
 app.use((req, res, next) => {
-    // Initialize res.locals for EJS templates
-    res.locals.user = null; // Default to null
-    res.locals.error = req.session.error || null; // Pass error from session
-    res.locals.success = req.session.success || null; // Pass success from session
-
-    // Clear session messages after rendering (moved to the end of this middleware)
-    // This ensures messages are available for the current request before being cleared for the next.
-    // However, for redirects, they are cleared in the route handlers after setting.
-
-    // Set res.locals.user based on session for EJS templates
-    if (req.session.guest) {
-        res.locals.user = { id: req.session.guest.id, role: 'guestAdmin' };
-    } else if (req.session.user) {
-        res.locals.user = { id: req.session.user.id, role: req.session.user.role }; // Use actual role from session
-    }
-    // Clear session messages here if they are only for the current request.
-    // For flash messages that survive a redirect, they should be deleted *after* the redirect.
-    // Your current route handlers for login/logout already do this.
-    // So, removing the `delete req.session.error; delete req.session.success;` from here.
+    res.locals.user = null;
+    res.locals.error = req.session.error || null;
+    res.locals.success = req.session.success || null;
     next();
 });
 
+// This block is redundant and can be removed as res.locals.user is set above
+// and req.session.guest/user are checked by auth middleware.
+// app.use((req, res, next) => {
+//     if (req.session.guest) {
+//         res.locals.user = { id: req.session.guest.id, role: 'guestAdmin' };
+//     } else if (req.session.user) {
+//         res.locals.user = { id: req.session.user.id, role: req.session.user.role };
+//     } else {
+//         res.locals.user = null;
+//     }
+//     next();
+// });
+
 // Routes
 app.get('/', (req, res) => {
-    // Redirect logged-in admins to their dashboard
     if (req.session.user && req.session.user.role === 'admin') {
         return res.redirect('/admin/dashboard');
     }
-    // Redirect logged-in guest admins to their panel
     if (req.session.guest) {
         return res.redirect('/guest/admin/panel');
     }
-    // Otherwise, render the public home page
     res.render('index', {
         pageTitle: 'Digital Guest Onboarding System',
-        message: res.locals.error || res.locals.success || null // Display any general messages
+        message: res.locals.error || res.locals.success || null
     });
 });
 app.use('/guest', require('./routes/guestRoutes'));
@@ -81,26 +87,26 @@ app.use('/admin', require('./routes/adminRoutes'));
 app.use((err, req, res, next) => {
     console.error('Application Error:', err.stack || err.message || err);
     req.session.error = err.message || 'An unexpected error occurred.';
-    res.status(err.status || 500).redirect('/'); // Redirect to home or a dedicated error page
+    res.status(err.status || 500).redirect('/');
 });
 
 // 404 Handler (for routes not found)
 app.use((req, res) => {
     req.session.error = 'Page not found.';
-    res.status(404).redirect('/'); // Redirect to home for 404
+    res.status(404).redirect('/');
 });
 
 const PORT = process.env.PORT || 3000;
 
 const startServer = async () => {
     try {
-        await connectDB(); // Connect to MongoDB
+        await connectDB();
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
         });
     } catch (error) {
         console.error('Failed to start server:', error);
-        process.exit(1); // Exit process if DB connection fails
+        process.exit(1);
     }
 };
 
