@@ -3,83 +3,49 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const adminController = require('../controllers/adminController');
-const guestController = require('../controllers/guestController');
-const Hotel = require('../models/hotel');
-const Guest = require('../models/guest');
-const { verifyToken } = require('../middleware/authMiddleware');
-const upload = require('../middleware/uploadMiddleware');
 const { ensureAdminLoggedIn } = require('../middleware/authMiddleware');
+const upload = require('../middleware/uploadMiddleware');
+const { hotelValidationRules, validate } = require('../middleware/validationMiddleware');
 
-// Public routes
+// Public routes (Admin Login/Logout)
 router.get('/login', (req, res) => {
-    if (req.user) {
+    if (req.session.user && req.session.user.role === 'admin') {
         return res.redirect('/admin/dashboard');
     }
-    res.render('admin/login', { error: null });
+    res.render('admin/login', { pageTitle: 'Admin Login', error: req.session.error || null });
+    delete req.session.error;
 });
 
 router.post('/login', authController.login);
+
 router.get('/logout', (req, res) => {
+    req.session.success = 'You have been logged out successfully.';
+
+    res.clearCookie('token'); // Clear JWT cookie (if any was set)
     req.session.destroy((err) => {
         if (err) {
             console.error('Error destroying session:', err);
+            req.session.error = 'Failed to log out completely. Please try again.';
         }
-        res.redirect('/admin/login'); // Redirect admins to admin login after logout
+        res.redirect('/admin/login');
     });
 });
 
-// Protected routes
-router.use(verifyToken);
+// Protected routes for Main Admin
+router.use(ensureAdminLoggedIn);
 
-router.get('/dashboard', async (req, res) => {
-    try {
-        // Fetch hotels from the database
-        const hotels = await Hotel.find();
+// Admin Dashboard
+router.get('/dashboard', adminController.dashboard);
 
-        // Get total number of guests
-        const totalGuests = await Guest.countDocuments();
-
-        // Get today's check-ins
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Set time to start of the day
-        const todayCheckIns = await Guest.countDocuments({
-            'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
-        });
-
-        // Fetch recent guests (limit to 10)
-        const recentGuests = await Guest.find()
-            .sort({ createdAt: -1 }) // Sort by most recent
-            .limit(10) // Limit to 10 guests
-            .populate('hotel', 'name'); // Include hotel name in guest data
-
-        // Pass the fetched data to the view
-        res.render('admin/dashboard', {
-            user: req.session.user, // User info from session
-            pageTitle: 'Admin Dashboard',
-            hotels,
-            totalGuests,
-            todayCheckIns,
-            recentGuests, // Include recentGuests
-        });
-    } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        res.redirect('/admin/login');
-    }
-});
-
-
+// Hotel Management
+router.get('/hotels', adminController.getHotels);
+router.post('/add-hotel', upload, hotelValidationRules, validate, adminController.addHotel);
 router.post('/hotels/:id/delete', adminController.deleteHotel);
+
+// Guest Management for Main Admin
 router.get('/hotels/:id/guests', adminController.getHotelGuests);
-router.get('/guests', adminController.getGuests);
-router.get('/hotels', guestController.listHotels);
-router.post('/add-hotel', upload, adminController.addHotel);
-
-// Route to view guest details
 router.get('/guests/:id', adminController.viewGuestDetails);
-
-router.post('/admin/edit-guest/:guestId', guestController.editGuest);
-
-// Route to handle actions on a guest
 router.get('/guests/:id/actions', adminController.guestActions);
+router.post('/guests/:guestId/edit', adminController.editGuest);
 
 module.exports = router;

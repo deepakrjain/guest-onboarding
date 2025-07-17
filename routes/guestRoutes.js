@@ -1,64 +1,44 @@
 const express = require('express');
 const router = express.Router();
 const guestController = require('../controllers/guestController');
-const Hotel = require('../models/hotel');
 const { ensureGuestLoggedIn } = require('../middleware/authMiddleware');
+const { guestValidationRules, validate } = require('../middleware/validationMiddleware');
 
-// Guest login and signup
+// Public Guest Routes
 router.get('/', guestController.showLogin);
 
 router.get('/login', guestController.showLogin);
 router.post('/login', guestController.login);
+
 router.get('/signup', guestController.showSignup);
 router.post('/signup', guestController.signup);
 
-// Route for listing all hotels
 router.get('/hotels', guestController.listHotels);
-
-// Route for viewing hotel details
 router.get('/hotel/:id', guestController.hotelDetails);
 
-// Route for the guest registration form for a specific hotel
 router.get('/form/:hotelId', guestController.showForm);
-router.post('/form/:hotelId', guestController.submitForm);
+router.post('/form/:hotelId', guestValidationRules, validate, guestController.submitForm);
 
-// Guest form routes
-router.get('/form', async (req, res) => {
-    const hotels = await Hotel.find();
-    if (hotels.length === 1) {
-        return res.redirect(`/guest/form/${hotels[0]._id}`);
-    }
-    res.render('guest/form', {
-        hotel: null,
-        pageTitle: 'Guest Registration',
-        errors: [],
-        formData: {},
-        hotels
-    });
-});
-router.get('/form/:hotelId', guestController.showForm);
-router.post('/form/:hotelId', guestController.submitForm);
-router.get('/hotel/:id', guestController.hotelDetails);
-
-// Guest admin panel
-router.get('/admin/panel', guestController.showAdminPanel);
-router.get('/admin/guests/:hotelId', guestController.getGuests);
-router.get('/admin/edit-guest/:guestId', guestController.getGuestDetails);
-router.post('/admin/edit-guest/:guestId', guestController.editGuest);
-
-router.get('/admin/view-guest/:guestId', guestController.viewGuestDetails);
-
-// Guest logout
 router.get('/logout', (req, res) => {
+    // --- CRITICAL CHANGE HERE ---
+    // Set success message BEFORE destroying the session
+    req.session.success = 'You have been logged out successfully.';
+
     req.session.destroy((err) => {
         if (err) {
-            console.error('Error destroying session:', err);
+            console.error('Error destroying guest session:', err);
+            req.session.error = 'Failed to log out completely. Please try again.';
         }
-        res.redirect('/guest/login'); // Redirect guests to guest login after logout
+        res.redirect('/guest/login');
     });
 });
 
+// Guest Admin Panel Routes (protected)
+router.use(ensureGuestLoggedIn);
 
 router.get('/admin/panel', guestController.showAdminPanel);
+router.get('/admin/edit-guest/:guestId', guestController.getGuestDetails);
+router.post('/admin/edit-guest/:guestId', guestController.editGuest);
+router.get('/admin/view-guest/:guestId', guestController.viewGuestDetails);
 
 module.exports = router;

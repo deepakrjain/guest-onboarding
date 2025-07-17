@@ -1,5 +1,4 @@
 ├── .env
-├── .vercel.json
 ├── app.js
 ├── config
     └── db.js

@@ -3,7 +3,6 @@ const Guest = require('../models/guest');
 const Hotel = require('../models/hotel');
 const { validationResult } = require('express-validator');
 
-
 exports.showLogin = (req, res) => {
     res.render('guest/login', { error: null });
 };
@@ -98,7 +97,6 @@ exports.showForm = async (req, res) => {
     }
 };
 
-
 // Guest login
 exports.login = async (req, res) => {
     const { username, password } = req.body;
@@ -132,47 +130,38 @@ exports.login = async (req, res) => {
 
 exports.showAdminPanel = async (req, res) => {
     try {
-        const guestId = req.session.guest?.id;
+        const guestAdminHotelId = req.session.guest?.hotelId; // Get hotelId from logged-in guest session
 
-        if (!guestId) {
-            return res.status(400).render('guest/adminPanel', {
-                pageTitle: 'Guest Admin Panel',
-                error: 'Guest not logged in. Please log in again.',
-                guests: [],
-                hotel: null,
-            });
+        if (!guestAdminHotelId) {
+            req.session.error = 'Guest Admin not associated with a hotel. Please log in again or contact admin.';
+            return res.status(400).redirect('/guest/login');
         }
 
-        const guest = await Guest.findById(guestId).populate('hotel');
-        if (!guest) {
-            return res.status(404).render('guest/adminPanel', {
-                pageTitle: 'Guest Admin Panel',
-                error: 'Guest details not found.',
-                guests: [],
-                hotel: null,
-            });
+        const hotel = await Hotel.findById(guestAdminHotelId);
+        if (!hotel) {
+            req.session.error = 'Associated hotel not found for this Guest Admin.';
+            return res.status(404).redirect('/guest/login');
         }
 
-        const hotel = guest.hotel;
-        const guests = await Guest.find({ _id: guestId });
+        // --- CRITICAL CHANGE HERE: Fetch ALL guests for this specific hotel ---
+        const guestsForHotel = await Guest.find({ hotel: guestAdminHotelId }).sort({ createdAt: -1 });
 
         res.render('guest/adminPanel', {
             pageTitle: `Guest Admin Panel - ${hotel.name}`,
             hotel,
-            guests,
-            error: null,
+            guests: guestsForHotel, // Pass all guests for the hotel
+            error: req.session.error || null, // Pass error from session
+            success: req.session.success || null // Pass success from session
         });
+        delete req.session.error; // Clear after rendering
+        delete req.session.success; // Clear after rendering
+
     } catch (error) {
         console.error('Error loading guest admin panel:', error);
-        res.status(500).render('guest/adminPanel', {
-            pageTitle: 'Guest Admin Panel',
-            error: 'An error occurred while loading the guest admin panel.',
-            guests: [],
-            hotel: null,
-        });
+        req.session.error = 'An error occurred while loading the guest admin panel.';
+        res.status(500).redirect('/guest/login'); // Redirect to login on error
     }
 };
-
 
 exports.signup = async (req, res) => {
     const { username, password, confirmPassword, hotelId, fullName, mobileNumber, email, address, purpose, stayFrom, stayTo, idProofNumber } = req.body;
@@ -215,8 +204,6 @@ exports.signup = async (req, res) => {
         res.status(500).render('guest/signup', { errors: [{ msg: 'Internal server error' }], hotels: await Hotel.find() });
     }
 };
-
-
 
 exports.getGuests = async (req, res) => {
     try {
@@ -268,7 +255,6 @@ exports.viewGuestDetails = async (req, res) => {
     }
 };
 
-
 // Fetch a guest's details for editing
 exports.getGuestDetails = async (req, res) => {
     try {
@@ -292,7 +278,7 @@ exports.getGuestDetails = async (req, res) => {
 /// Update guest's details after editing
 exports.editGuest = async (req, res) => {
     try {
-        const { fullName, mobileNumber, purpose, stayDates, email } = req.body;
+        const { fullName, mobileNumber, purpose, stayDates, email, address, idProofNumber } = req.body; // Added address, idProofNumber
         
         const updatedStayDates = {
             from: new Date(stayDates.from),
@@ -305,36 +291,37 @@ exports.editGuest = async (req, res) => {
             purpose,
             stayDates: updatedStayDates,
             email,
-        }, { new: true });
+            address, // Ensure address is updated
+            idProofNumber // Ensure idProofNumber is updated
+        }, { new: true, runValidators: true }); // runValidators ensures schema validations are run on update
 
         if (!updatedGuest) {
-            return res.status(404).render('admin/guestDetails', {
-                pageTitle: 'Guest Not Found',
-                message: 'Unable to find guest for editing.',
-            });
+            req.session.error = 'Guest not found for editing.';
+            return res.status(404).redirect('/guest/admin/panel'); // Redirect to panel on error
         }
 
-        res.redirect('/guest/admin/panel');
+        req.session.success = 'Guest details updated successfully! ✨'; // Set success message
+        res.redirect('/guest/admin/panel'); // Redirect back to the guest admin panel
     } catch (error) {
         console.error('Error editing guest:', error);
-        res.status(500).render('index', {
-            pageTitle: 'Error',
-            message: 'An error occurred while editing the guest details.',
-        });
+        req.session.error = 'An error occurred while editing the guest details.'; // Set error message
+        res.status(500).redirect('/guest/admin/panel'); // Redirect to panel on error
     }
 };
-
-
 
 exports.submitForm = async (req, res) => {
     try {
         const errors = validationResult(req);
+        const hotelId = req.params.hotelId; // Get hotelId from params
+        const hotel = await Hotel.findById(hotelId); // Fetch hotel details
+
+        if (!hotel) {
+            req.session.error = 'Hotel not found for registration.';
+            return res.status(404).redirect('/guest/hotels');
+        }
 
         if (!errors.isEmpty()) {
-            const hotel = await Hotel.findById(req.params.hotelId);
-            if (!hotel) {
-                return res.status(404).send('Hotel not found');
-            }
+            // Pass errors and formData back to the form for re-rendering
             return res.render('guest/registerForm', {
                 pageTitle: `Register at ${hotel.name}`,
                 hotel,
@@ -345,14 +332,49 @@ exports.submitForm = async (req, res) => {
 
         const { fullName, mobileNumber, email, address, purpose, stayDates, idProofNumber } = req.body;
 
-        const username = `guest_${Date.now()}`;
-        const existingGuest = await Guest.findOne({ idProofNumber });
-        if (existingGuest) {
-            throw new Error('A guest with the same ID proof already exists');
+        // Convert stayDates to Date objects for proper comparison
+        const newStayFrom = new Date(stayDates.from);
+        const newStayTo = new Date(stayDates.to);
+
+        // --- CRITICAL CHANGE: Comprehensive Date Clash Logic ---
+        // Query for existing bookings for this hotel that overlap with the new dates
+        const overlappingBookings = await Guest.find({
+            hotel: hotelId, // Ensure we only check for the specific hotel
+            $and: [
+                { 'stayDates.from': { $lt: newStayTo } }, // Existing booking starts BEFORE new booking ends
+                { 'stayDates.to': { $gt: newStayFrom } }  // Existing booking ends AFTER new booking starts
+            ]
+        });
+
+        if (overlappingBookings.length > 0) {
+            // If any overlapping booking is found, display an error
+            req.session.error = `Hotel ${hotel.name} is reserved for some dates within your selected period (${newStayFrom.toLocaleDateString()} to ${newStayTo.toLocaleDateString()}). Please choose different dates.`;
+            return res.render('guest/registerForm', {
+                pageTitle: `Register at ${hotel.name}`,
+                hotel,
+                formData: req.body,
+                errors: [{ msg: req.session.error }] // Pass error to view
+            });
+        }
+        // --- END OF CRITICAL CHANGE ---
+
+        // Check if ID proof number already exists (for unique guest identification)
+        const existingGuestByIdProof = await Guest.findOne({ idProofNumber });
+        if (existingGuestByIdProof) {
+            req.session.error = 'A guest with the same ID proof number already exists. If you are returning, please log in.';
+            return res.render('guest/registerForm', {
+                pageTitle: `Register at ${hotel.name}`,
+                hotel,
+                formData: req.body,
+                errors: [{ msg: req.session.error }]
+            });
         }
 
+        // Generate a unique username for the guest (e.g., using ID proof number, ensuring no spaces)
+        const username = `guest_${idProofNumber.replace(/\s/g, '')}`;
+
         const guest = new Guest({
-            hotel: req.params.hotelId,
+            hotel: hotelId, // Use the extracted hotelId
             fullName,
             username,
             mobileNumber,
@@ -360,29 +382,34 @@ exports.submitForm = async (req, res) => {
             address,
             purpose,
             stayDates: {
-                from: stayDates.from,
-                to: stayDates.to
+                from: newStayFrom, // Use converted Date objects
+                to: newStayTo // Use converted Date objects
             },
             idProofNumber
         });
 
         await guest.save();
+        req.session.success = `Thank you, ${guest.fullName}! Your registration is complete.`;
         res.render('guest/thankyou', {
             pageTitle: 'Registration Successful',
-            fullName: guest.fullName
+            fullName: guest.fullName,
+            success: req.session.success // Pass success to thankyou page
         });
+        // Clear session messages after rendering the thank you page
+        delete req.session.success;
+        delete req.session.error;
     } catch (err) {
         console.error('Guest form submission error:', err.message);
-        const hotel = await Hotel.findById(req.params.hotelId);
+        const hotel = await Hotel.findById(req.params.hotelId); // Re-fetch hotel for error rendering
+        req.session.error = 'An error occurred during registration. Please try again.';
         res.status(500).render('guest/registerForm', {
             pageTitle: 'Error',
             hotel,
             formData: req.body,
-            errors: [{ msg: err.message }]
+            errors: [{ msg: err.message || req.session.error }]
         });
     }
 };
-
 
 exports.showSignup = async (req, res) => {
     try {

@@ -1,37 +1,40 @@
 const jwt = require('jsonwebtoken');
 
+// Define verifyToken as a const
 const verifyToken = (req, res, next) => {
     try {
-        const token = req.cookies.token; // Read token from cookies
-        if (!token) {
-            return res.redirect('/admin/login'); // Redirect to login if no token
+        const token = req.cookies.token;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            req.user = decoded;
         }
-
-        // Decode and verify the token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || '1067');
-        req.user = decoded; // Attach decoded token to `req.user` for downstream use
-
-        next(); // Pass control to the next middleware/handler
+        next();
     } catch (error) {
-        console.error('Token verification error:', error.message);
-        res.clearCookie('token'); // Clear invalid token
-        res.redirect('/admin/login'); // Redirect if token is invalid
+        console.error('JWT Token verification error:', error.message);
+        res.clearCookie('token');
+        next();
     }
 };
 
-
-exports.ensureGuestLoggedIn = (req, res, next) => {
+// Define ensureGuestLoggedIn as a const
+const ensureGuestLoggedIn = (req, res, next) => {
     if (req.session.guest) {
+        req.user = { id: req.session.guest.id, role: 'guestAdmin', hotelId: req.session.guest.hotelId };
         return next();
     }
+    req.session.error = 'Please log in to access the Guest Admin Panel.';
     res.redirect('/guest/login');
 };
 
-exports.ensureAdminLoggedIn = (req, res, next) => {
-    if (req.session.user) {
+// Define ensureAdminLoggedIn as a const
+const ensureAdminLoggedIn = (req, res, next) => {
+    if (req.session.user && req.session.user.role === 'admin') {
+        req.user = { id: req.session.user.id, role: req.session.user.role };
         return next();
     }
+    req.session.error = 'Access denied. Admin privileges required.';
     res.redirect('/admin/login');
 };
 
-module.exports = { verifyToken };
+// Export all defined middleware functions
+module.exports = { verifyToken, ensureGuestLoggedIn, ensureAdminLoggedIn };

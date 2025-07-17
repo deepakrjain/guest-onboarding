@@ -5,66 +5,71 @@
         <div class="alert alert-danger">
             <p>Unable to find the associated hotel. Please contact support.</p>
         </div>
+    <% } else { %>
+        <p>Manage guests for <strong>
+                <%= hotel.name %>
+            </strong>.</p>
+    <% } %>
+
+    <% if (error) { %>
+        <div class="alert alert-danger">
+            <%= error %>
+        </div>
+    <% } %>
+
+    <% if (success) { %>
+        <div class="alert alert-success">
+            <%= success %>
+        </div>
+    <% } %>
+
+    <% if (guests.length > 0) { %>
+        <div class="table-responsive mt-4">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Full Name</th>
+                        <th>Mobile</th>
+                        <th>Purpose</th>
+                        <th>Stay Dates</th>
+                        <th>ID Proof Number</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% guests.forEach(guest=> { %>
+                        <tr>
+                            <td>
+                                <%= guest.fullName %>
+                            </td>
+                            <td>
+                                <%= guest.mobileNumber %>
+                            </td>
+                            <td>
+                                <%= guest.purpose %>
+                            </td>
+                            <td>
+                                <%= guest.stayDates.from.toLocaleDateString() %> -
+                                <%= guest.stayDates.to.toLocaleDateString() %>
+                            </td>
+                            <td>
+                                <%= guest.idProofNumber %>
+                            </td>
+                            <td>
+                                <a href="/guest/admin/edit-guest/<%= guest._id %>"
+                                    class="btn btn-sm btn-warning">Edit</a>
+                                <a href="/guest/admin/view-guest/<%= guest._id %>"
+                                    class="btn btn-sm btn-info">View</a>
+                            </td>
+                        </tr>
+                        <% }) %>
+                </tbody>
+            </table>
+        </div>
         <% } else { %>
-            <p>Manage guests for <strong>
-                    <%= hotel.name %>
-                </strong>.</p>
+            <div class="alert alert-info mt-4">No guests found for this hotel.</div>
             <% } %>
-
-                <% if (error) { %>
-                    <div class="alert alert-danger">
-                        <%= error %>
-                    </div>
-                    <% } %>
-
-                        <% if (guests.length> 0) { %>
-                            <div class="table-responsive mt-4">
-                                <table class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>Full Name</th>
-                                            <th>Mobile</th>
-                                            <th>Purpose</th>
-                                            <th>Stay Dates</th>
-                                            <th>Hotel</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <% guests.forEach(guest=> { %>
-                                            <tr>
-                                                <td>
-                                                    <%= guest.fullName %>
-                                                </td>
-                                                <td>
-                                                    <%= guest.mobileNumber %>
-                                                </td>
-                                                <td>
-                                                    <%= guest.purpose %>
-                                                </td>
-                                                <td>
-                                                    <%= guest.hotel?.name || 'N/A' %>
-                                                </td>
-                                                <td>
-                                                    <%= guest.stayDates.from.toLocaleDateString() %> - <%=
-                                                            guest.stayDates.to.toLocaleDateString() %>
-                                                </td>
-
-                                                <td>
-                                                    <a href="/guest/admin/edit-guest/<%= guest._id %>"
-                                                        class="btn btn-sm btn-warning">Edit</a>
-                                                    <a href="/guest/admin/view-guest/<%= guest._id %>"
-                                                        class="btn btn-sm btn-info">View</a>
-                                                </td>
-                                            </tr>
-                                            <% }) %>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <% } else { %>
-                                <div class="alert alert-info mt-4">No guests found for this hotel.</div>
-                                <% } %>
-                                    <div class="mt-4">
-                                        <a href="/guest/hotels" class="btn btn-primary">View Available Hotels</a>
-                                    </div>
+                <div class="mt-4">
+                    <a href="/guest/hotels" class="btn btn-primary">View Available Hotels</a>
+                </div>
 </div>

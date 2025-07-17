@@ -24,58 +24,66 @@ app.set('layout', 'layout');
 
 // Session Configuration
 app.use(session({
-    secret: '1067',
+    secret: process.env.JWT_SECRET || 'a_very_secret_key_for_session', // Use environment variable for secret
     resave: false,
     saveUninitialized: false,
-    cookie: { 
+    cookie: {
         secure: process.env.NODE_ENV === 'production', // Secure in production
+        httpOnly: true, // Prevent client-side JS from reading the cookie
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
 }));
 
-// Global Middleware
+// Global Middleware to make user and messages available in EJS
 app.use((req, res, next) => {
-    res.locals.user = req.user || null;
-    res.locals.error = null;
-    res.locals.success = null;
-    next();
-});
+    // Initialize res.locals for EJS templates
+    res.locals.user = null; // Default to null
+    res.locals.error = req.session.error || null; // Pass error from session
+    res.locals.success = req.session.success || null; // Pass success from session
 
-app.use((req, res, next) => {
+    // Clear session messages after rendering
+    delete req.session.error;
+    delete req.session.success;
+
+    // Set res.locals.user based on session for EJS templates
     if (req.session.guest) {
         res.locals.user = { id: req.session.guest.id, role: 'guestAdmin' };
     } else if (req.session.user) {
-        res.locals.user = { id: req.session.user.id, role: 'admin' };
-    } else {
-        res.locals.user = null;
+        res.locals.user = { id: req.session.user.id, role: req.session.user.role }; // Use actual role from session
     }
     next();
 });
 
 // Routes
 app.get('/', (req, res) => {
-    res.render('index', { 
+    // Redirect logged-in admins to their dashboard
+    if (req.session.user && req.session.user.role === 'admin') {
+        return res.redirect('/admin/dashboard');
+    }
+    // Redirect logged-in guest admins to their panel
+    if (req.session.guest) {
+        return res.redirect('/guest/admin/panel');
+    }
+    // Otherwise, render the public home page
+    res.render('index', {
         pageTitle: 'Digital Guest Onboarding System',
-        message: null 
+        message: res.locals.error || res.locals.success || null
     });
 });
 app.use('/guest', require('./routes/guestRoutes'));
 app.use('/admin', require('./routes/adminRoutes'));
 
-// Error Handling
+// Error Handling Middleware (catch-all for unhandled errors)
 app.use((err, req, res, next) => {
-    console.error('Error:', err.message || err);
-    res.status(err.status || 500).render('index', {
-        pageTitle: 'Error',
-        message: err.message || 'An unexpected error occurred.'
-    });
+    console.error('Application Error:', err.stack || err.message || err);
+    req.session.error = err.message || 'An unexpected error occurred.';
+    res.status(err.status || 500).redirect('/');
 });
 
-// 404 Handler
+// 404 Handler (for routes not found)
 app.use((req, res) => {
-    res.status(404).render('index', {
-        pageTitle: '404 Not Found',
-        message: 'Page not found'
-    });
+    req.session.error = 'Page not found.';
+    res.status(404).redirect('/');
 });
 
 const PORT = process.env.PORT || 3000;

@@ -99,13 +99,13 @@ app.use((req, res) => {
     });
 });
 
-// initialize database and start server
+const PORT = process.env.PORT || 3000;
+
 const startServer = async () => {
     try {
         await connectDB();
-        const PORT = process.env.PORT || 3000;
         app.listen(PORT, () => {
-            console.log(`Server running on http://localhost:${PORT}`);
+            console.log(`Server running on port ${PORT}`);
         });
     } catch (error) {
         console.error('Failed to start server:', error);
@@ -129,10 +129,7 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
     try {
-        await mongoose.connect(process.env.MONGO_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true
-        });
+        await mongoose.connect(process.env.MONGODB_URI);
         console.log('MongoDB connected successfully!');
     } catch (err) {
         console.error('MongoDB connection error:', err.message);
@@ -501,29 +498,45 @@ exports.editGuest = async (req, res) => {
 # controllers\authController.js
 
 ```js
-const User = require('../models/admin');  // we're still importing from admin.js but it points to 'users' collection
+const Admin = require('../models/admin');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+
 exports.login = async (req, res) => {
     try {
         const { username, password } = req.body;
-        console.log('Login attempt:', { username, password });
+        console.log('Login attempt:', { username });
 
-        const user = await User.findOne({ username: username });
-        console.log('Found user:', user);
+        // Find user in the database
+        const user = await Admin.findOne({ username });
 
         if (!user) {
             console.log('No user found with username:', username);
+            // Use req.session.error for consistent flash messages
+            req.session.error = 'Invalid username or password.';
             return res.render('admin/login', {
-                error: 'Invalid username or password'
+                error: req.session.error // Pass to EJS
             });
         }
 
-        if (user.password !== password) {
-            console.log('Password mismatch');
+        // For debugging - remove in production
+        console.log('Found user:', {
+            username: user.username,
+            role: user.role
+        });
+
+        // --- CRITICAL CHANGE HERE: Use bcrypt.compare() ---
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if (!isMatch) {
+            console.log('Password mismatch for user:', username); // Improved log message
+            // Use req.session.error for consistent flash messages
+            req.session.error = 'Invalid username or password.';
             return res.render('admin/login', {
-                error: 'Invalid username or password'
+                error: req.session.error // Pass to EJS
             });
         }
+        // --- END OF CRITICAL CHANGE ---
 
         // Create session
         req.session.user = {
@@ -535,26 +548,27 @@ exports.login = async (req, res) => {
         // Generate JWT token
         const token = jwt.sign(
             { id: user._id, username: user.username, role: user.role },
-            process.env.JWT_SECRET || '1067',
-            { expiresIn: '1h' } // Token expiration time
+            process.env.JWT_SECRET, // Rely solely on environment variable
+            { expiresIn: '1h' }
         );
 
         // Set token as a cookie
-        res.cookie('token', token, { httpOnly: true });
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 3600000 // 1 hour in milliseconds
+        });
 
         console.log('Login successful, redirecting to dashboard');
+        req.session.success = 'Login successful! Welcome.'; // Add success flash message
         res.redirect('/admin/dashboard');
     } catch (error) {
         console.error('Login error:', error);
+        req.session.error = 'An error occurred during login.'; // Use req.session.error
         res.render('admin/login', {
-            error: 'An error occurred during login'
+            error: req.session.error // Pass to EJS
         });
     }
-};
-
-exports.logout = (req, res) => {
-    res.clearCookie('token');
-    res.redirect('/admin/login');
 };
 ```
 
@@ -565,7 +579,6 @@ const bcrypt = require('bcryptjs');
 const Guest = require('../models/guest');
 const Hotel = require('../models/hotel');
 const { validationResult } = require('express-validator');
-
 
 exports.showLogin = (req, res) => {
     res.render('guest/login', { error: null });
@@ -661,7 +674,6 @@ exports.showForm = async (req, res) => {
     }
 };
 
-
 // Guest login
 exports.login = async (req, res) => {
     const { username, password } = req.body;
@@ -695,47 +707,38 @@ exports.login = async (req, res) => {
 
 exports.showAdminPanel = async (req, res) => {
     try {
-        const guestId = req.session.guest?.id;
+        const guestAdminHotelId = req.session.guest?.hotelId; // Get hotelId from logged-in guest session
 
-        if (!guestId) {
-            return res.status(400).render('guest/adminPanel', {
-                pageTitle: 'Guest Admin Panel',
-                error: 'Guest not logged in. Please log in again.',
-                guests: [],
-                hotel: null,
-            });
+        if (!guestAdminHotelId) {
+            req.session.error = 'Guest Admin not associated with a hotel. Please log in again or contact admin.';
+            return res.status(400).redirect('/guest/login');
         }
 
-        const guest = await Guest.findById(guestId).populate('hotel');
-        if (!guest) {
-            return res.status(404).render('guest/adminPanel', {
-                pageTitle: 'Guest Admin Panel',
-                error: 'Guest details not found.',
-                guests: [],
-                hotel: null,
-            });
+        const hotel = await Hotel.findById(guestAdminHotelId);
+        if (!hotel) {
+            req.session.error = 'Associated hotel not found for this Guest Admin.';
+            return res.status(404).redirect('/guest/login');
         }
 
-        const hotel = guest.hotel;
-        const guests = await Guest.find({ _id: guestId });
+        // --- CRITICAL CHANGE HERE: Fetch ALL guests for this specific hotel ---
+        const guestsForHotel = await Guest.find({ hotel: guestAdminHotelId }).sort({ createdAt: -1 });
 
         res.render('guest/adminPanel', {
             pageTitle: `Guest Admin Panel - ${hotel.name}`,
             hotel,
-            guests,
-            error: null,
+            guests: guestsForHotel, // Pass all guests for the hotel
+            error: req.session.error || null, // Pass error from session
+            success: req.session.success || null // Pass success from session
         });
+        delete req.session.error; // Clear after rendering
+        delete req.session.success; // Clear after rendering
+
     } catch (error) {
         console.error('Error loading guest admin panel:', error);
-        res.status(500).render('guest/adminPanel', {
-            pageTitle: 'Guest Admin Panel',
-            error: 'An error occurred while loading the guest admin panel.',
-            guests: [],
-            hotel: null,
-        });
+        req.session.error = 'An error occurred while loading the guest admin panel.';
+        res.status(500).redirect('/guest/login'); // Redirect to login on error
     }
 };
-
 
 exports.signup = async (req, res) => {
     const { username, password, confirmPassword, hotelId, fullName, mobileNumber, email, address, purpose, stayFrom, stayTo, idProofNumber } = req.body;
@@ -778,8 +781,6 @@ exports.signup = async (req, res) => {
         res.status(500).render('guest/signup', { errors: [{ msg: 'Internal server error' }], hotels: await Hotel.find() });
     }
 };
-
-
 
 exports.getGuests = async (req, res) => {
     try {
@@ -831,7 +832,6 @@ exports.viewGuestDetails = async (req, res) => {
     }
 };
 
-
 // Fetch a guest's details for editing
 exports.getGuestDetails = async (req, res) => {
     try {
@@ -855,7 +855,7 @@ exports.getGuestDetails = async (req, res) => {
 /// Update guest's details after editing
 exports.editGuest = async (req, res) => {
     try {
-        const { fullName, mobileNumber, purpose, stayDates, email } = req.body;
+        const { fullName, mobileNumber, purpose, stayDates, email, address, idProofNumber } = req.body; // Added address, idProofNumber
         
         const updatedStayDates = {
             from: new Date(stayDates.from),
@@ -868,36 +868,37 @@ exports.editGuest = async (req, res) => {
             purpose,
             stayDates: updatedStayDates,
             email,
-        }, { new: true });
+            address, // Ensure address is updated
+            idProofNumber // Ensure idProofNumber is updated
+        }, { new: true, runValidators: true }); // runValidators ensures schema validations are run on update
 
         if (!updatedGuest) {
-            return res.status(404).render('admin/guestDetails', {
-                pageTitle: 'Guest Not Found',
-                message: 'Unable to find guest for editing.',
-            });
+            req.session.error = 'Guest not found for editing.';
+            return res.status(404).redirect('/guest/admin/panel'); // Redirect to panel on error
         }
 
-        res.redirect('/guest/admin/panel');
+        req.session.success = 'Guest details updated successfully! ✨'; // Set success message
+        res.redirect('/guest/admin/panel'); // Redirect back to the guest admin panel
     } catch (error) {
         console.error('Error editing guest:', error);
-        res.status(500).render('index', {
-            pageTitle: 'Error',
-            message: 'An error occurred while editing the guest details.',
-        });
+        req.session.error = 'An error occurred while editing the guest details.'; // Set error message
+        res.status(500).redirect('/guest/admin/panel'); // Redirect to panel on error
     }
 };
-
-
 
 exports.submitForm = async (req, res) => {
     try {
         const errors = validationResult(req);
+        const hotelId = req.params.hotelId; // Get hotelId from params
+        const hotel = await Hotel.findById(hotelId); // Fetch hotel details
+
+        if (!hotel) {
+            req.session.error = 'Hotel not found for registration.';
+            return res.status(404).redirect('/guest/hotels');
+        }
 
         if (!errors.isEmpty()) {
-            const hotel = await Hotel.findById(req.params.hotelId);
-            if (!hotel) {
-                return res.status(404).send('Hotel not found');
-            }
+            // Pass errors and formData back to the form for re-rendering
             return res.render('guest/registerForm', {
                 pageTitle: `Register at ${hotel.name}`,
                 hotel,
@@ -908,14 +909,49 @@ exports.submitForm = async (req, res) => {
 
         const { fullName, mobileNumber, email, address, purpose, stayDates, idProofNumber } = req.body;
 
-        const username = `guest_${Date.now()}`;
-        const existingGuest = await Guest.findOne({ idProofNumber });
-        if (existingGuest) {
-            throw new Error('A guest with the same ID proof already exists');
+        // Convert stayDates to Date objects for proper comparison
+        const newStayFrom = new Date(stayDates.from);
+        const newStayTo = new Date(stayDates.to);
+
+        // --- CRITICAL CHANGE: Comprehensive Date Clash Logic ---
+        // Query for existing bookings for this hotel that overlap with the new dates
+        const overlappingBookings = await Guest.find({
+            hotel: hotelId, // Ensure we only check for the specific hotel
+            $and: [
+                { 'stayDates.from': { $lt: newStayTo } }, // Existing booking starts BEFORE new booking ends
+                { 'stayDates.to': { $gt: newStayFrom } }  // Existing booking ends AFTER new booking starts
+            ]
+        });
+
+        if (overlappingBookings.length > 0) {
+            // If any overlapping booking is found, display an error
+            req.session.error = `Hotel ${hotel.name} is reserved for some dates within your selected period (${newStayFrom.toLocaleDateString()} to ${newStayTo.toLocaleDateString()}). Please choose different dates.`;
+            return res.render('guest/registerForm', {
+                pageTitle: `Register at ${hotel.name}`,
+                hotel,
+                formData: req.body,
+                errors: [{ msg: req.session.error }] // Pass error to view
+            });
+        }
+        // --- END OF CRITICAL CHANGE ---
+
+        // Check if ID proof number already exists (for unique guest identification)
+        const existingGuestByIdProof = await Guest.findOne({ idProofNumber });
+        if (existingGuestByIdProof) {
+            req.session.error = 'A guest with the same ID proof number already exists. If you are returning, please log in.';
+            return res.render('guest/registerForm', {
+                pageTitle: `Register at ${hotel.name}`,
+                hotel,
+                formData: req.body,
+                errors: [{ msg: req.session.error }]
+            });
         }
 
+        // Generate a unique username for the guest (e.g., using ID proof number, ensuring no spaces)
+        const username = `guest_${idProofNumber.replace(/\s/g, '')}`;
+
         const guest = new Guest({
-            hotel: req.params.hotelId,
+            hotel: hotelId, // Use the extracted hotelId
             fullName,
             username,
             mobileNumber,
@@ -923,29 +959,34 @@ exports.submitForm = async (req, res) => {
             address,
             purpose,
             stayDates: {
-                from: stayDates.from,
-                to: stayDates.to
+                from: newStayFrom, // Use converted Date objects
+                to: newStayTo // Use converted Date objects
             },
             idProofNumber
         });
 
         await guest.save();
+        req.session.success = `Thank you, ${guest.fullName}! Your registration is complete.`;
         res.render('guest/thankyou', {
             pageTitle: 'Registration Successful',
-            fullName: guest.fullName
+            fullName: guest.fullName,
+            success: req.session.success // Pass success to thankyou page
         });
+        // Clear session messages after rendering the thank you page
+        delete req.session.success;
+        delete req.session.error;
     } catch (err) {
         console.error('Guest form submission error:', err.message);
-        const hotel = await Hotel.findById(req.params.hotelId);
+        const hotel = await Hotel.findById(req.params.hotelId); // Re-fetch hotel for error rendering
+        req.session.error = 'An error occurred during registration. Please try again.';
         res.status(500).render('guest/registerForm', {
             pageTitle: 'Error',
             hotel,
             formData: req.body,
-            errors: [{ msg: err.message }]
+            errors: [{ msg: err.message || req.session.error }]
         });
     }
 };
-
 
 exports.showSignup = async (req, res) => {
     try {
@@ -1030,41 +1071,44 @@ exports.addGuest = async (req, res) => {
 ```js
 const jwt = require('jsonwebtoken');
 
+// Define verifyToken as a const
 const verifyToken = (req, res, next) => {
     try {
-        const token = req.cookies.token; // Read token from cookies
-        if (!token) {
-            return res.redirect('/admin/login'); // Redirect to login if no token
+        const token = req.cookies.token;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            req.user = decoded;
         }
-
-        // Decode and verify the token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || '1067');
-        req.user = decoded; // Attach decoded token to `req.user` for downstream use
-
-        next(); // Pass control to the next middleware/handler
+        next();
     } catch (error) {
-        console.error('Token verification error:', error.message);
-        res.clearCookie('token'); // Clear invalid token
-        res.redirect('/admin/login'); // Redirect if token is invalid
+        console.error('JWT Token verification error:', error.message);
+        res.clearCookie('token');
+        next();
     }
 };
 
-
-exports.ensureGuestLoggedIn = (req, res, next) => {
+// Define ensureGuestLoggedIn as a const
+const ensureGuestLoggedIn = (req, res, next) => {
     if (req.session.guest) {
+        req.user = { id: req.session.guest.id, role: 'guestAdmin', hotelId: req.session.guest.hotelId };
         return next();
     }
+    req.session.error = 'Please log in to access the Guest Admin Panel.';
     res.redirect('/guest/login');
 };
 
-exports.ensureAdminLoggedIn = (req, res, next) => {
-    if (req.session.user) {
+// Define ensureAdminLoggedIn as a const
+const ensureAdminLoggedIn = (req, res, next) => {
+    if (req.session.user && req.session.user.role === 'admin') {
+        req.user = { id: req.session.user.id, role: req.session.user.role };
         return next();
     }
+    req.session.error = 'Access denied. Admin privileges required.';
     res.redirect('/admin/login');
 };
 
-module.exports = { verifyToken };
+// Export all defined middleware functions
+module.exports = { verifyToken, ensureGuestLoggedIn, ensureAdminLoggedIn };
 ```
 
 # middleware\uploadMiddleware.js
@@ -1198,14 +1242,23 @@ exports.validate = (req, res, next) => {
 
 ```js
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs'); // Ensure bcryptjs is imported
 
 const adminSchema = new mongoose.Schema({
-    username: String,
-    password: String,
-    role: String
-}, { collection: 'users' });  // explicitly specify the collection name
+    username: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    role: { type: String, default: 'admin' }
+}, { collection: 'users', timestamps: true });
 
-module.exports = mongoose.model('User', adminSchema);
+adminSchema.pre('save', async function (next) {
+    if (this.isModified('password')) {
+        const salt = await bcrypt.genSalt(10); // Generate a salt
+        this.password = await bcrypt.hash(this.password, salt); // Hash the password
+    }
+    next();
+});
+
+module.exports = mongoose.model('Admin', adminSchema);
 ```
 
 # models\guest.js
@@ -1681,84 +1734,50 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const adminController = require('../controllers/adminController');
-const guestController = require('../controllers/guestController');
-const Hotel = require('../models/hotel');
-const Guest = require('../models/guest');
-const { verifyToken } = require('../middleware/authMiddleware');
-const upload = require('../middleware/uploadMiddleware');
 const { ensureAdminLoggedIn } = require('../middleware/authMiddleware');
+const upload = require('../middleware/uploadMiddleware');
+const { hotelValidationRules, validate } = require('../middleware/validationMiddleware');
 
-// Public routes
+// Public routes (Admin Login/Logout)
 router.get('/login', (req, res) => {
-    if (req.user) {
+    if (req.session.user && req.session.user.role === 'admin') {
         return res.redirect('/admin/dashboard');
     }
-    res.render('admin/login', { error: null });
+    res.render('admin/login', { pageTitle: 'Admin Login', error: req.session.error || null });
+    delete req.session.error;
 });
 
 router.post('/login', authController.login);
+
 router.get('/logout', (req, res) => {
+    req.session.success = 'You have been logged out successfully.';
+
+    res.clearCookie('token'); // Clear JWT cookie (if any was set)
     req.session.destroy((err) => {
         if (err) {
             console.error('Error destroying session:', err);
+            req.session.error = 'Failed to log out completely. Please try again.';
         }
-        res.redirect('/admin/login'); // Redirect admins to admin login after logout
+        res.redirect('/admin/login');
     });
 });
 
-// Protected routes
-router.use(verifyToken);
+// Protected routes for Main Admin
+router.use(ensureAdminLoggedIn);
 
-router.get('/dashboard', async (req, res) => {
-    try {
-        // Fetch hotels from the database
-        const hotels = await Hotel.find();
+// Admin Dashboard
+router.get('/dashboard', adminController.dashboard);
 
-        // Get total number of guests
-        const totalGuests = await Guest.countDocuments();
-
-        // Get today's check-ins
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Set time to start of the day
-        const todayCheckIns = await Guest.countDocuments({
-            'stayDates.from': { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
-        });
-
-        // Fetch recent guests (limit to 10)
-        const recentGuests = await Guest.find()
-            .sort({ createdAt: -1 }) // Sort by most recent
-            .limit(10) // Limit to 10 guests
-            .populate('hotel', 'name'); // Include hotel name in guest data
-
-        // Pass the fetched data to the view
-        res.render('admin/dashboard', {
-            user: req.session.user, // User info from session
-            pageTitle: 'Admin Dashboard',
-            hotels,
-            totalGuests,
-            todayCheckIns,
-            recentGuests, // Include recentGuests
-        });
-    } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        res.redirect('/admin/login');
-    }
-});
-
-
+// Hotel Management
+router.get('/hotels', adminController.getHotels);
+router.post('/add-hotel', upload, hotelValidationRules, validate, adminController.addHotel);
 router.post('/hotels/:id/delete', adminController.deleteHotel);
+
+// Guest Management for Main Admin
 router.get('/hotels/:id/guests', adminController.getHotelGuests);
-router.get('/guests', adminController.getGuests);
-router.get('/hotels', guestController.listHotels);
-router.post('/add-hotel', upload, adminController.addHotel);
-
-// Route to view guest details
 router.get('/guests/:id', adminController.viewGuestDetails);
-
-router.post('/admin/edit-guest/:guestId', guestController.editGuest);
-
-// Route to handle actions on a guest
 router.get('/guests/:id/actions', adminController.guestActions);
+router.post('/guests/:guestId/edit', adminController.editGuest);
 
 module.exports = router;
 ```
@@ -1769,65 +1788,45 @@ module.exports = router;
 const express = require('express');
 const router = express.Router();
 const guestController = require('../controllers/guestController');
-const Hotel = require('../models/hotel');
 const { ensureGuestLoggedIn } = require('../middleware/authMiddleware');
+const { guestValidationRules, validate } = require('../middleware/validationMiddleware');
 
-// Guest login and signup
+// Public Guest Routes
 router.get('/', guestController.showLogin);
 
 router.get('/login', guestController.showLogin);
 router.post('/login', guestController.login);
+
 router.get('/signup', guestController.showSignup);
 router.post('/signup', guestController.signup);
 
-// Route for listing all hotels
 router.get('/hotels', guestController.listHotels);
-
-// Route for viewing hotel details
 router.get('/hotel/:id', guestController.hotelDetails);
 
-// Route for the guest registration form for a specific hotel
 router.get('/form/:hotelId', guestController.showForm);
-router.post('/form/:hotelId', guestController.submitForm);
+router.post('/form/:hotelId', guestValidationRules, validate, guestController.submitForm);
 
-// Guest form routes
-router.get('/form', async (req, res) => {
-    const hotels = await Hotel.find();
-    if (hotels.length === 1) {
-        return res.redirect(`/guest/form/${hotels[0]._id}`);
-    }
-    res.render('guest/form', {
-        hotel: null,
-        pageTitle: 'Guest Registration',
-        errors: [],
-        formData: {},
-        hotels
-    });
-});
-router.get('/form/:hotelId', guestController.showForm);
-router.post('/form/:hotelId', guestController.submitForm);
-router.get('/hotel/:id', guestController.hotelDetails);
-
-// Guest admin panel
-router.get('/admin/panel', guestController.showAdminPanel);
-router.get('/admin/guests/:hotelId', guestController.getGuests);
-router.get('/admin/edit-guest/:guestId', guestController.getGuestDetails);
-router.post('/admin/edit-guest/:guestId', guestController.editGuest);
-
-router.get('/admin/view-guest/:guestId', guestController.viewGuestDetails);
-
-// Guest logout
 router.get('/logout', (req, res) => {
+    // --- CRITICAL CHANGE HERE ---
+    // Set success message BEFORE destroying the session
+    req.session.success = 'You have been logged out successfully.';
+
     req.session.destroy((err) => {
         if (err) {
-            console.error('Error destroying session:', err);
+            console.error('Error destroying guest session:', err);
+            req.session.error = 'Failed to log out completely. Please try again.';
         }
-        res.redirect('/guest/login'); // Redirect guests to guest login after logout
+        res.redirect('/guest/login');
     });
 });
 
+// Guest Admin Panel Routes (protected)
+router.use(ensureGuestLoggedIn);
 
 router.get('/admin/panel', guestController.showAdminPanel);
+router.get('/admin/edit-guest/:guestId', guestController.getGuestDetails);
+router.post('/admin/edit-guest/:guestId', guestController.editGuest);
+router.get('/admin/view-guest/:guestId', guestController.viewGuestDetails);
 
 module.exports = router;
 ```
@@ -2227,68 +2226,73 @@ module.exports = generateQRCode;
         <div class="alert alert-danger">
             <p>Unable to find the associated hotel. Please contact support.</p>
         </div>
+    <% } else { %>
+        <p>Manage guests for <strong>
+                <%= hotel.name %>
+            </strong>.</p>
+    <% } %>
+
+    <% if (error) { %>
+        <div class="alert alert-danger">
+            <%= error %>
+        </div>
+    <% } %>
+
+    <% if (success) { %>
+        <div class="alert alert-success">
+            <%= success %>
+        </div>
+    <% } %>
+
+    <% if (guests.length > 0) { %>
+        <div class="table-responsive mt-4">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Full Name</th>
+                        <th>Mobile</th>
+                        <th>Purpose</th>
+                        <th>Stay Dates</th>
+                        <th>ID Proof Number</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% guests.forEach(guest=> { %>
+                        <tr>
+                            <td>
+                                <%= guest.fullName %>
+                            </td>
+                            <td>
+                                <%= guest.mobileNumber %>
+                            </td>
+                            <td>
+                                <%= guest.purpose %>
+                            </td>
+                            <td>
+                                <%= guest.stayDates.from.toLocaleDateString() %> -
+                                <%= guest.stayDates.to.toLocaleDateString() %>
+                            </td>
+                            <td>
+                                <%= guest.idProofNumber %>
+                            </td>
+                            <td>
+                                <a href="/guest/admin/edit-guest/<%= guest._id %>"
+                                    class="btn btn-sm btn-warning">Edit</a>
+                                <a href="/guest/admin/view-guest/<%= guest._id %>"
+                                    class="btn btn-sm btn-info">View</a>
+                            </td>
+                        </tr>
+                        <% }) %>
+                </tbody>
+            </table>
+        </div>
         <% } else { %>
-            <p>Manage guests for <strong>
-                    <%= hotel.name %>
-                </strong>.</p>
+            <div class="alert alert-info mt-4">No guests found for this hotel.</div>
             <% } %>
-
-                <% if (error) { %>
-                    <div class="alert alert-danger">
-                        <%= error %>
-                    </div>
-                    <% } %>
-
-                        <% if (guests.length> 0) { %>
-                            <div class="table-responsive mt-4">
-                                <table class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>Full Name</th>
-                                            <th>Mobile</th>
-                                            <th>Purpose</th>
-                                            <th>Stay Dates</th>
-                                            <th>Hotel</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <% guests.forEach(guest=> { %>
-                                            <tr>
-                                                <td>
-                                                    <%= guest.fullName %>
-                                                </td>
-                                                <td>
-                                                    <%= guest.mobileNumber %>
-                                                </td>
-                                                <td>
-                                                    <%= guest.purpose %>
-                                                </td>
-                                                <td>
-                                                    <%= guest.hotel?.name || 'N/A' %>
-                                                </td>
-                                                <td>
-                                                    <%= guest.stayDates.from.toLocaleDateString() %> - <%=
-                                                            guest.stayDates.to.toLocaleDateString() %>
-                                                </td>
-
-                                                <td>
-                                                    <a href="/guest/admin/edit-guest/<%= guest._id %>"
-                                                        class="btn btn-sm btn-warning">Edit</a>
-                                                    <a href="/guest/admin/view-guest/<%= guest._id %>"
-                                                        class="btn btn-sm btn-info">View</a>
-                                                </td>
-                                            </tr>
-                                            <% }) %>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <% } else { %>
-                                <div class="alert alert-info mt-4">No guests found for this hotel.</div>
-                                <% } %>
-                                    <div class="mt-4">
-                                        <a href="/guest/hotels" class="btn btn-primary">View Available Hotels</a>
-                                    </div>
+                <div class="mt-4">
+                    <a href="/guest/hotels" class="btn btn-primary">View Available Hotels</a>
+                </div>
 </div>
 ```
 
