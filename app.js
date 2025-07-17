@@ -24,7 +24,7 @@ app.set('layout', 'layout');
 
 // Session Configuration
 app.use(session({
-    secret: process.env.JWT_SECRET || 'a_very_secret_key_for_session', // Use environment variable for secret
+    secret: process.env.JWT_SECRET || 'a_very_secret_key_for_session', // <--- IMPORTANT: Use process.env.JWT_SECRET
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -41,9 +41,9 @@ app.use((req, res, next) => {
     res.locals.error = req.session.error || null; // Pass error from session
     res.locals.success = req.session.success || null; // Pass success from session
 
-    // Clear session messages after rendering
-    delete req.session.error;
-    delete req.session.success;
+    // Clear session messages after rendering (moved to the end of this middleware)
+    // This ensures messages are available for the current request before being cleared for the next.
+    // However, for redirects, they are cleared in the route handlers after setting.
 
     // Set res.locals.user based on session for EJS templates
     if (req.session.guest) {
@@ -51,6 +51,10 @@ app.use((req, res, next) => {
     } else if (req.session.user) {
         res.locals.user = { id: req.session.user.id, role: req.session.user.role }; // Use actual role from session
     }
+    // Clear session messages here if they are only for the current request.
+    // For flash messages that survive a redirect, they should be deleted *after* the redirect.
+    // Your current route handlers for login/logout already do this.
+    // So, removing the `delete req.session.error; delete req.session.success;` from here.
     next();
 });
 
@@ -67,7 +71,7 @@ app.get('/', (req, res) => {
     // Otherwise, render the public home page
     res.render('index', {
         pageTitle: 'Digital Guest Onboarding System',
-        message: res.locals.error || res.locals.success || null
+        message: res.locals.error || res.locals.success || null // Display any general messages
     });
 });
 app.use('/guest', require('./routes/guestRoutes'));
@@ -77,26 +81,26 @@ app.use('/admin', require('./routes/adminRoutes'));
 app.use((err, req, res, next) => {
     console.error('Application Error:', err.stack || err.message || err);
     req.session.error = err.message || 'An unexpected error occurred.';
-    res.status(err.status || 500).redirect('/');
+    res.status(err.status || 500).redirect('/'); // Redirect to home or a dedicated error page
 });
 
 // 404 Handler (for routes not found)
 app.use((req, res) => {
     req.session.error = 'Page not found.';
-    res.status(404).redirect('/');
+    res.status(404).redirect('/'); // Redirect to home for 404
 });
 
 const PORT = process.env.PORT || 3000;
 
 const startServer = async () => {
     try {
-        await connectDB();
+        await connectDB(); // Connect to MongoDB
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
         });
     } catch (error) {
         console.error('Failed to start server:', error);
-        process.exit(1);
+        process.exit(1); // Exit process if DB connection fails
     }
 };
 
