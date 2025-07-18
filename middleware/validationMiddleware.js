@@ -1,23 +1,25 @@
 // middleware/validationMiddleware.js
 const { body, validationResult } = require('express-validator');
+const Hotel = require('../models/hotel');
 
 exports.guestValidationRules = [
+    // ... (your existing validation rules) ...
     body('fullName')
         .trim()
         .notEmpty().withMessage('Full name is required')
         .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters'),
-    
+
     body('mobileNumber')
         .matches(/^[0-9]{10}$/).withMessage('Please enter a valid 10-digit mobile number'),
-    
+
     body('address')
         .trim()
         .notEmpty().withMessage('Address is required')
         .isLength({ min: 5 }).withMessage('Address must be at least 5 characters long'),
-    
+
     body('purpose')
         .isIn(['Business', 'Personal', 'Tourist']).withMessage('Invalid purpose selected'),
-    
+
     body('stayDates.from')
         .isISO8601().withMessage('Invalid check-in date')
         .custom((value, { req }) => {
@@ -29,8 +31,8 @@ exports.guestValidationRules = [
             }
             return true;
         }),
-    
-        body('stayDates.to')
+
+    body('stayDates.to')
         .isISO8601().withMessage('Invalid check-out date')
         .custom((value, { req }) => {
             const fromDate = new Date(req.body.stayDates.from);
@@ -43,12 +45,12 @@ exports.guestValidationRules = [
             }
             return true;
         }),
-    
+
     body('email')
         .trim()
         .isEmail().withMessage('Please enter a valid email address')
         .normalizeEmail(),
-    
+
     body('idProofNumber')
         .trim()
         .notEmpty().withMessage('ID proof number is required')
@@ -60,26 +62,45 @@ exports.hotelValidationRules = [
         .trim()
         .notEmpty().withMessage('Hotel name is required')
         .isLength({ min: 2, max: 100 }).withMessage('Hotel name must be between 2 and 100 characters'),
-    
+
     body('address')
         .trim()
         .notEmpty().withMessage('Address is required')
         .isLength({ min: 5 }).withMessage('Address must be at least 5 characters long')
 ];
 
-exports.validate = (req, res, next) => {
+exports.validate = async (req, res, next) => { // <--- Make it async
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         const errorMessages = errors.array().map(err => err.msg);
 
         // Determine the template and page title dynamically
-        const template = req.originalUrl.includes('guest') ? 'guest/form' : 'admin/hotels';
-        const pageTitle = req.originalUrl.includes('guest') ? 'Guest Registration' : 'Manage Hotels';
+        let template;
+        let pageTitle;
+        let hotel = null; // Initialize hotel to null
+
+        if (req.originalUrl.includes('/guest/form/')) {
+            template = 'guest/registerForm'; // <--- CRITICAL CHANGE: Correct EJS template name
+            pageTitle = 'Guest Registration';
+            // Extract hotelId from URL and fetch hotel data
+            const hotelId = req.params.hotelId;
+            if (hotelId) {
+                hotel = await Hotel.findById(hotelId); // <--- NEW: Fetch hotel data
+            }
+        } else {
+            template = 'admin/hotels';
+            pageTitle = 'Manage Hotels';
+            // For admin/hotels, you might need to fetch hotels list if not already done
+            // This depends on how admin/hotels route is structured.
+            // For simplicity, we assume adminController.addHotel will handle fetching hotels if it renders.
+        }
 
         return res.render(template, {
             errors: errorMessages,
             formData: req.body,
             pageTitle,
+            hotel: hotel, // <--- NEW: Pass hotel data to guest/registerForm
+            hotels: await Hotel.find() // Pass hotels for admin/hotels template if needed
         });
     }
     next();
