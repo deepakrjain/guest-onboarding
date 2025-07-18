@@ -268,12 +268,37 @@ exports.addHotel = async (req, res) => {
     try {
         const { name, address, description } = req.body;
         // ... file uploads ...
+        const uploadedLogo = req.files && req.files['logo'] ? req.files['logo'][0] : null;
+        const uploadedPhotos = req.files && req.files['photos'] ? req.files['photos'] : [];
 
-        const newHotel = new Hotel({ name, address, description, logo, photos });
+        const logoFilename = uploadedLogo ? uploadedLogo.filename : null;
+        const photoFilenames = uploadedPhotos.map(file => file.filename);
+        // --- END CRITICAL CHANGE ---
+
+        const hotels = await Hotel.find(); // Always fetch hotels for rendering
+
+        // Check if logo is present and at least 3 photos are uploaded
+        if (!logoFilename || photoFilenames.length < 3) {
+            req.session.error = 'Logo and at least 3 photos are required. ⚠️';
+            return res.render('admin/hotels', {
+                pageTitle: 'Manage Hotels',
+                hotels: hotels,
+                error: req.session.error
+            });
+        }
+
+        // Save hotel to the database
+        const newHotel = new Hotel({
+            name,
+            address,
+            description,
+            logo: logoFilename, // Use the extracted filename
+            photos: photoFilenames // Use the extracted filenames
+        });
         await newHotel.save();
 
+        console.log('BASE_URL for QR code:', process.env.BASE_URL);
         // Generate QR code for hotel using its unique ID
-        // Ensure process.env.BASE_URL is loaded and available
         const qrCodeUrl = `${process.env.BASE_URL}/guest/form/${newHotel._id}`; // This line
         const qrCodeDataUrl = await QRCode.toDataURL(qrCodeUrl);
 
